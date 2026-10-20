@@ -40,10 +40,10 @@ export function DynamicContractClient({
   const [activeTab, setActiveTab] = useState('servicios');
 
   // Dynamic branding colors
-  const primaryColor = proposal.brand_color_primary || globalSettings.color_primary || '#ff6600';
-  const secondaryColor = proposal.brand_color_secondary || globalSettings.color_secondary || '#0f172a';
-  const logoUrl = proposal.brand_logo_url || globalSettings.brand_logo || '/recurso.png';
-  const brandName = globalSettings.brand_name || 'Sin Límites';
+  const primaryColor = proposal.brand_color_primary || globalSettings.color_primary || '#0066FF';
+  const secondaryColor = proposal.brand_color_secondary || globalSettings.color_secondary || '#00F0FF';
+  const logoUrl = proposal.brand_logo_url || globalSettings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+  const brandName = globalSettings.brand_name || 'ContractPress';
 
   const displayFriendlyDate = (dateStr: string | undefined) => {
     if (!dateStr) return '';

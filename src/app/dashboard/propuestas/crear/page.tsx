@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   createProposal,
-  getCatalog
+  getCatalog,
+  uploadAsset
 } from '@/lib/actions';
 import type {
   CatalogCategory,
@@ -61,6 +62,25 @@ export default function CrearPropuestaPage() {
   const [brandColorPrimary, setBrandColorPrimary] = useState('');
   const [brandColorSecondary, setBrandColorSecondary] = useState('');
   const [brandLogoUrl, setBrandLogoUrl] = useState('');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const { url } = await uploadAsset(formData);
+      setBrandLogoUrl(url);
+      toast.success('Logo subido a Supabase Storage con éxito');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al subir archivo a Supabase Storage');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   // Servicios
   const [services, setServices] = useState<ServiceFormState[]>([]);
@@ -421,6 +441,116 @@ export default function CrearPropuestaPage() {
                     <SelectItem value='PAGADO'>Pagado al 100%</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* SECCIÓN 1.5: BRANDING Y LOGO DE LA PROPUESTA (SUPABASE STORAGE) */}
+        <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
+          <CardHeader className='pb-3'>
+            <CardTitle className='text-base font-bold flex items-center gap-2'>
+              <Icons.palette className='h-4 w-4 text-blue-500' />
+              Personalización de Marca y Logotipo (Opcional)
+            </CardTitle>
+            <CardDescription>
+              Sube el logo del cliente o de la propuesta a Supabase Storage, o déjalo vacío para usar el logo predeterminado
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            <div className='p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3'>
+              <div className='flex items-center justify-between'>
+                <Label htmlFor='proposalLogoUpload' className='text-xs font-semibold'>
+                  Logotipo para este Contrato (Supabase Storage)
+                </Label>
+                {brandLogoUrl && (
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='xs'
+                    onClick={() => setBrandLogoUrl('')}
+                    className='text-[11px] text-destructive hover:text-destructive/80 cursor-pointer'
+                  >
+                    Quitar logo personalizado
+                  </Button>
+                )}
+              </div>
+
+              <div className='flex flex-col sm:flex-row items-center gap-4'>
+                {brandLogoUrl ? (
+                  <div className='h-14 w-32 rounded-lg border border-border/60 bg-slate-950/80 p-2 flex items-center justify-center shrink-0 shadow-inner'>
+                    <img
+                      src={brandLogoUrl}
+                      alt='Logo Propuesta'
+                      className='max-h-full max-w-full object-contain'
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/icon.svg';
+                      }}
+                    />
+                  </div>
+                ) : null}
+
+                <div className='space-y-2 flex-1 w-full'>
+                  <div className='flex items-center gap-2'>
+                    <Input
+                      id='proposalLogoUpload'
+                      type='file'
+                      accept='image/svg+xml,image/png,image/jpeg,image/webp'
+                      onChange={handleLogoUpload}
+                      disabled={isUploadingLogo}
+                      className='text-xs file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer'
+                    />
+                    {isUploadingLogo && (
+                      <Icons.spinner className='h-4 w-4 animate-spin text-blue-500 shrink-0' />
+                    )}
+                  </div>
+                  <Input
+                    value={brandLogoUrl}
+                    onChange={(e) => setBrandLogoUrl(e.target.value)}
+                    placeholder='URL directa o generada automáticamente desde Supabase...'
+                    className='text-xs font-mono text-muted-foreground'
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+              <div className='space-y-2'>
+                <Label htmlFor='brandColorPrimary' className='text-xs'>Color Primario (Acento / Botones)</Label>
+                <div className='flex items-center gap-2'>
+                  <input
+                    type='color'
+                    id='brandColorPrimary'
+                    value={brandColorPrimary || '#0066FF'}
+                    onChange={(e) => setBrandColorPrimary(e.target.value)}
+                    className='h-9 w-9 rounded border border-border cursor-pointer p-0 bg-transparent'
+                  />
+                  <Input
+                    value={brandColorPrimary}
+                    onChange={(e) => setBrandColorPrimary(e.target.value)}
+                    placeholder='#0066FF'
+                    className='font-mono text-xs'
+                  />
+                </div>
+              </div>
+
+              <div className='space-y-2'>
+                <Label htmlFor='brandColorSecondary' className='text-xs'>Color Secundario (Encabezados / Detalles)</Label>
+                <div className='flex items-center gap-2'>
+                  <input
+                    type='color'
+                    id='brandColorSecondary'
+                    value={brandColorSecondary || '#00F0FF'}
+                    onChange={(e) => setBrandColorSecondary(e.target.value)}
+                    className='h-9 w-9 rounded border border-border cursor-pointer p-0 bg-transparent'
+                  />
+                  <Input
+                    value={brandColorSecondary}
+                    onChange={(e) => setBrandColorSecondary(e.target.value)}
+                    placeholder='#00F0FF'
+                    className='font-mono text-xs'
+                  />
+                </div>
               </div>
             </div>
           </CardContent>

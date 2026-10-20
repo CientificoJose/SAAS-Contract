@@ -3,6 +3,7 @@
 import { supabaseAdmin } from './supabase/admin';
 import { createClient } from './supabase/server';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import nodemailer from 'nodemailer';
 import type {
   Proposal,
@@ -34,6 +35,60 @@ export async function getCurrentUser() {
     };
   } catch {
     return null;
+  }
+}
+
+export async function logoutAction() {
+  try {
+    const supabase = await createClient();
+    await supabase.auth.signOut().catch(() => {});
+  } catch {}
+
+  try {
+    const cookieStore = await cookies();
+    const allCookies = cookieStore.getAll();
+    for (const c of allCookies) {
+      if (c.name.startsWith('sb-') || c.name.includes('supabase') || c.name.includes('auth')) {
+        cookieStore.delete(c.name);
+      }
+    }
+  } catch {}
+
+  return { success: true };
+}
+
+export async function uploadAsset(formData: FormData): Promise<{ url: string }> {
+  try {
+    const file = formData.get('file') as File;
+    if (!file) throw new Error('No se ha seleccionado ningún archivo');
+
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'png';
+    const cleanName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+    const filePath = `uploads/${cleanName}`;
+
+    const { error } = await supabaseAdmin.storage
+      .from('contract-assets')
+      .upload(filePath, buffer, {
+        contentType: file.type || 'image/png',
+        upsert: true
+      });
+
+    if (error) {
+      console.error('Storage upload error:', error);
+      throw new Error(error.message || 'Error al subir archivo a Supabase Storage');
+    }
+
+    const { data: pubUrl } = supabaseAdmin.storage
+      .from('contract-assets')
+      .getPublicUrl(filePath);
+
+    return { url: pubUrl.publicUrl };
+  } catch (err: any) {
+    console.error('Error in uploadAsset:', err);
+    throw new Error(err.message || 'Error al procesar subida de archivo');
   }
 }
 
@@ -321,10 +376,35 @@ export async function registerPayment(data: {
 export async function saveSignature(proposalId: string, signatureImage: string, dateISO?: string) {
   try {
     const signatureDate = dateISO || new Date().toISOString();
+    let finalSignatureUrl = signatureImage;
+
+    if (signatureImage && signatureImage.startsWith('data:image/')) {
+      try {
+        const base64Data = signatureImage.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const filePath = `signatures/${proposalId}-${Date.now()}.png`;
+        const { error: upErr } = await supabaseAdmin.storage
+          .from('contract-assets')
+          .upload(filePath, buffer, {
+            contentType: 'image/png',
+            upsert: true
+          });
+
+        if (!upErr) {
+          const { data: pubUrl } = supabaseAdmin.storage
+            .from('contract-assets')
+            .getPublicUrl(filePath);
+          finalSignatureUrl = pubUrl.publicUrl;
+        }
+      } catch (uploadErr) {
+        console.warn('Could not upload signature to storage, saving as dataURL fallback', uploadErr);
+      }
+    }
+
     const { error } = await supabaseAdmin
       .from('proposals')
       .update({
-        signature_image: signatureImage,
+        signature_image: finalSignatureUrl,
         signature_date: signatureDate
       })
       .eq('id', proposalId);
@@ -332,7 +412,7 @@ export async function saveSignature(proposalId: string, signatureImage: string, 
     if (error) throw error;
     revalidatePath(`/p/${proposalId}`);
     revalidatePath('/dashboard');
-    return { success: true, signatureDate };
+    return { success: true, signatureDate, signatureUrl: finalSignatureUrl };
   } catch (err: any) {
     console.error('Error saving signature:', err);
     throw new Error(err.message || 'Error al guardar la firma');
@@ -552,22 +632,40 @@ export async function deleteServicePlan(id: string) {
 export async function getSettings(): Promise<Record<string, string>> {
   try {
     const { data, error } = await supabaseAdmin.from('settings').select('*');
-    if (error || !data) {
-      return {
-        brand_name: 'Sin Límites',
-        brand_logo: '/recurso.png',
-        color_primary: '#ff6600',
-        color_secondary: '#0f172a'
-      };
+    const map: Record<string, string> = {
+      brand_name: 'ContractPress',
+      brand_logo: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
+      color_primary: '#0066FF',
+      color_secondary: '#00F0FF',
+      smtp_host: process.env.SMTP_HOST || 'mail.press-cloud.com',
+      smtp_port: process.env.SMTP_PORT || '465',
+      smtp_user: process.env.SMTP_USER || 'contract@press-cloud.com',
+      smtp_pass: process.env.SMTP_PASS || '',
+      smtp_from: process.env.SMTP_FROM || 'Contract <contract@press-cloud.com>'
+    };
+
+    if (data && data.length > 0) {
+      data.forEach((row) => {
+        if (row.value) {
+          map[row.key] = row.value;
+        }
+      });
     }
-    const map: Record<string, string> = {};
-    data.forEach((row) => {
-      map[row.key] = row.value;
-    });
+
     return map;
   } catch (err) {
     console.error('Error fetching settings:', err);
-    return {};
+    return {
+      brand_name: 'ContractPress',
+      brand_logo: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
+      color_primary: '#0066FF',
+      color_secondary: '#00F0FF',
+      smtp_host: process.env.SMTP_HOST || 'mail.press-cloud.com',
+      smtp_port: process.env.SMTP_PORT || '465',
+      smtp_user: process.env.SMTP_USER || 'contract@press-cloud.com',
+      smtp_pass: process.env.SMTP_PASS || '',
+      smtp_from: process.env.SMTP_FROM || 'Contract <contract@press-cloud.com>'
+    };
   }
 }
 
@@ -597,28 +695,41 @@ export async function updateSettings(settings: Record<string, string>) {
 export async function sendTestEmail(recipientEmail: string) {
   try {
     const settings = await getSettings();
-    if (!settings.smtp_host || !settings.smtp_user) {
+    const host = settings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
+    const portStr = settings.smtp_port || process.env.SMTP_PORT || '465';
+    const port = parseInt(portStr);
+    const user = settings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
+    const pass = settings.smtp_pass || process.env.SMTP_PASS || '';
+    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractPress'}" <${user}>`;
+
+    if (!host || !user) {
       throw new Error('Servidor SMTP no configurado');
     }
 
     const transporter = nodemailer.createTransport({
-      host: settings.smtp_host,
-      port: parseInt(settings.smtp_port || '587'),
-      secure: settings.smtp_port === '465',
+      host,
+      port,
+      secure: port === 465,
       auth: {
-        user: settings.smtp_user,
-        pass: settings.smtp_pass
+        user,
+        pass
+      },
+      tls: {
+        rejectUnauthorized: false
       }
     });
 
     await transporter.sendMail({
-      from: `"${settings.brand_name || 'Press Cloud'}" <${settings.smtp_user}>`,
+      from,
       to: recipientEmail,
-      subject: `Prueba de configuración de correo - ${settings.brand_name || 'Press Cloud'}`,
+      subject: `Prueba de configuración de correo - ${settings.brand_name || 'ContractPress'}`,
       text: 'Este es un correo de prueba enviado desde tu gestor de contratos.',
-      html: `<div style="font-family:sans-serif;padding:20px;">
-        <h2 style="color:${settings.color_primary || '#ff6600'}">¡Configuración Exitosa!</h2>
-        <p>Tu servidor SMTP está listo para enviar propuestas comerciales y notificaciones a tus clientes.</p>
+      html: `<div style="font-family:sans-serif;padding:24px;max-width:550px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+          <h2 style="color:${settings.color_primary || '#0066FF'};margin:0;">¡Configuración Exitosa!</h2>
+        </div>
+        <p style="color:#334155;font-size:15px;line-height:1.6;">Tu servidor SMTP está listo para enviar propuestas comerciales y notificaciones de contratos a tus clientes.</p>
+        <p style="color:#64748b;font-size:13px;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:12px;">Enviado desde <strong>${settings.brand_name || 'ContractPress'}</strong> • contract.press-cloud.com</p>
       </div>`
     });
 
@@ -637,38 +748,51 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
     ]);
 
     if (!proposal) throw new Error('Propuesta no encontrada');
-    if (!settings.smtp_host || !settings.smtp_user) {
+
+    const host = settings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
+    const portStr = settings.smtp_port || process.env.SMTP_PORT || '465';
+    const port = parseInt(portStr);
+    const user = settings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
+    const pass = settings.smtp_pass || process.env.SMTP_PASS || '';
+    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractPress'}" <${user}>`;
+
+    if (!host || !user) {
       throw new Error('Servidor SMTP no configurado');
     }
 
     const transporter = nodemailer.createTransport({
-      host: settings.smtp_host,
-      port: parseInt(settings.smtp_port || '587'),
-      secure: settings.smtp_port === '465',
+      host,
+      port,
+      secure: port === 465,
       auth: {
-        user: settings.smtp_user,
-        pass: settings.smtp_pass
+        user,
+        pass
+      },
+      tls: {
+        rejectUnauthorized: false
       }
     });
 
     const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://contract.press-cloud.com'}/p/${proposal.id}`;
 
     await transporter.sendMail({
-      from: `"${settings.brand_name || 'Sin Límites'}" <${settings.smtp_user}>`,
+      from,
       to: recipientEmail,
       subject: `Propuesta Comercial #${proposal.invoice_number} - ${proposal.client_company}`,
       html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:8px;padding:24px;background:#ffffff;">
-          <h2 style="color:${settings.color_primary || '#ff6600'};margin-top:0;">Propuesta de Servicios y Contrato Comercial</h2>
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;padding:28px;background:#ffffff;">
+          <h2 style="color:${settings.color_primary || '#0066FF'};margin-top:0;">Propuesta de Servicios y Contrato Comercial</h2>
           <p>Hola <strong>${proposal.client_name}</strong> (${proposal.client_company}),</p>
           <p>Se ha generado la propuesta comercial número <strong>#${proposal.invoice_number}</strong> para tus servicios contratados.</p>
-          <p>Puedes revisar los alcances detallados, formas de pago y firmar digitalmente desde nuestro portal interactivo:</p>
-          <div style="text-align:center;margin:30px 0;">
-            <a href="${proposalUrl}" style="background-color:${settings.color_primary || '#ff6600'};color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">
-              Ver y Firmar Propuesta Digital
+          <p>Puedes revisar los alcances detallados, formas de pago y formalizar con firma digital desde nuestro portal interactivo:</p>
+          <div style="text-align:center;margin:32px 0;">
+            <a href="${proposalUrl}" style="background-color:${settings.color_primary || '#0066FF'};color:#ffffff;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+              Ver Propuesta y Contrato Comercial
             </a>
           </div>
-          <p style="font-size:12px;color:#64748b;text-align:center;">${settings.brand_name || 'Press Cloud'} - Todos los derechos reservados.</p>
+          <p style="font-size:12px;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:16px;">
+            Este enlace es único y seguro para ${proposal.client_company}.
+          </p>
         </div>
       `
     });

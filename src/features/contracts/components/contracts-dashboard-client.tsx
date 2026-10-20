@@ -18,7 +18,8 @@ import {
   registerPayment,
   sendTestEmail,
   sendProposalEmail,
-  getProposalById
+  getProposalById,
+  uploadAsset
 } from '@/lib/actions';
 import type {
   Proposal,
@@ -90,14 +91,15 @@ export function ContractsDashboardClient({
 
   // Settings state
   const [settings, setSettings] = useState(initialSettings);
-  const [brandName, setBrandName] = useState(initialSettings.brand_name || 'Sin Límites');
-  const [brandLogo, setBrandLogo] = useState(initialSettings.brand_logo || '/recurso.png');
-  const [colorPrim, setColorPrim] = useState(initialSettings.color_primary || '#ff6600');
-  const [colorSec, setColorSec] = useState(initialSettings.color_secondary || '#0f172a');
-  const [smtpHost, setSmtpHost] = useState(initialSettings.smtp_host || '');
-  const [smtpPort, setSmtpPort] = useState(initialSettings.smtp_port || '587');
-  const [smtpUser, setSmtpUser] = useState(initialSettings.smtp_user || '');
+  const [brandName, setBrandName] = useState(initialSettings.brand_name || 'ContractPress');
+  const [brandLogo, setBrandLogo] = useState(initialSettings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg');
+  const [colorPrim, setColorPrim] = useState(initialSettings.color_primary || '#0066FF');
+  const [colorSec, setColorSec] = useState(initialSettings.color_secondary || '#00F0FF');
+  const [smtpHost, setSmtpHost] = useState(initialSettings.smtp_host || 'mail.press-cloud.com');
+  const [smtpPort, setSmtpPort] = useState(initialSettings.smtp_port || '465');
+  const [smtpUser, setSmtpUser] = useState(initialSettings.smtp_user || 'contract@press-cloud.com');
   const [smtpPass, setSmtpPass] = useState(initialSettings.smtp_pass || '');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   // Test Email state
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
@@ -473,6 +475,24 @@ export function ContractsDashboardClient({
       toast.error(err.message || 'Error al enviar correo de prueba');
     } finally {
       setIsSendingTest(false);
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const { url } = await uploadAsset(formData);
+      setBrandLogo(url);
+      toast.success('Logo subido a Supabase Storage con éxito');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al subir archivo a Supabase Storage');
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
 
@@ -1014,14 +1034,59 @@ export function ContractsDashboardClient({
                     />
                   </div>
 
-                  <div className='space-y-2'>
-                    <Label htmlFor='brandLogo'>URL del Logo Corporativo</Label>
-                    <Input
-                      id='brandLogo'
-                      value={brandLogo}
-                      onChange={(e) => setBrandLogo(e.target.value)}
-                      placeholder='/recurso.png o https://...'
-                    />
+                  <div className='space-y-3 p-4 rounded-xl border border-border/60 bg-muted/20'>
+                    <div className='flex items-center justify-between'>
+                      <Label htmlFor='brandLogo' className='font-semibold text-sm'>
+                        Logo Corporativo (Supabase Storage)
+                      </Label>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='xs'
+                        onClick={() => setBrandLogo('https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg')}
+                        className='text-[11px] text-blue-500 hover:text-blue-600 cursor-pointer'
+                      >
+                        Restablecer al Oficial SVG
+                      </Button>
+                    </div>
+
+                    <div className='flex flex-col sm:flex-row items-center gap-4'>
+                      {brandLogo ? (
+                        <div className='h-16 w-36 rounded-lg border border-border/60 bg-slate-950/80 p-2 flex items-center justify-center shrink-0 shadow-inner'>
+                          <img
+                            src={brandLogo}
+                            alt='Logo'
+                            className='max-h-full max-w-full object-contain'
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = '/icon.svg';
+                            }}
+                          />
+                        </div>
+                      ) : null}
+
+                      <div className='space-y-2 flex-1 w-full'>
+                        <div className='flex items-center gap-2'>
+                          <Input
+                            id='logoUpload'
+                            type='file'
+                            accept='image/svg+xml,image/png,image/jpeg,image/webp'
+                            onChange={handleLogoUpload}
+                            disabled={isUploadingLogo}
+                            className='text-xs file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer'
+                          />
+                          {isUploadingLogo && (
+                            <Icons.spinner className='h-4 w-4 animate-spin text-primary shrink-0' />
+                          )}
+                        </div>
+                        <Input
+                          id='brandLogo'
+                          value={brandLogo}
+                          onChange={(e) => setBrandLogo(e.target.value)}
+                          placeholder='URL en Supabase Storage o https://...'
+                          className='text-xs font-mono text-muted-foreground'
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className='grid grid-cols-2 gap-4'>

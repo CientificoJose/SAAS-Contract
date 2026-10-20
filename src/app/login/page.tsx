@@ -48,23 +48,31 @@ export default function LoginPage() {
   };
 
   return (
-    <div className='min-h-screen flex items-center justify-center bg-slate-950 p-4'>
-      <Card className='w-full max-w-md border-slate-800 bg-slate-900/90 text-white shadow-2xl backdrop-blur-xl'>
-        <CardHeader className='text-center space-y-2 pb-6'>
-          <div className='mx-auto w-12 h-12 rounded-xl bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-orange-500 font-bold text-xl mb-2'>
-            ⚡
+    <div className='min-h-screen flex items-center justify-center bg-[#070b14] p-4 relative overflow-hidden'>
+      {/* Background cyber electric glow */}
+      <div className='absolute -top-40 -left-40 w-96 h-96 bg-blue-600/20 rounded-full blur-[120px] pointer-events-none' />
+      <div className='absolute -bottom-40 -right-40 w-96 h-96 bg-cyan-500/15 rounded-full blur-[120px] pointer-events-none' />
+
+      <Card className='w-full max-w-md border-blue-900/40 bg-[#0d1322]/90 text-white shadow-2xl backdrop-blur-xl relative z-10'>
+        <CardHeader className='text-center space-y-3 pb-6'>
+          <div className='mx-auto flex justify-center mb-1'>
+            <img
+              src='/logo.svg'
+              alt='ContractPress Logo'
+              className='h-12 w-auto object-contain'
+            />
           </div>
-          <CardTitle className='text-2xl font-bold tracking-tight text-white'>
-            Contract Press Cloud
+          <CardTitle className='text-xl font-bold tracking-tight text-white'>
+            Acceso al Sistema
           </CardTitle>
-          <CardDescription className='text-slate-400'>
-            Ingresa tus credenciales para acceder al panel de gestión
+          <CardDescription className='text-slate-400 text-xs'>
+            Ingresa tus credenciales para administrar tus contratos y propuestas
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className='space-y-4'>
             <div className='space-y-2'>
-              <Label htmlFor='email' className='text-slate-300'>Correo Electrónico</Label>
+              <Label htmlFor='email' className='text-slate-300 text-xs font-medium'>Correo Electrónico</Label>
               <Input
                 id='email'
                 type='email'
@@ -72,12 +80,12 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className='bg-slate-950/60 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-orange-500'
+                className='bg-slate-950/70 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-blue-500'
               />
             </div>
             <div className='space-y-2'>
               <div className='flex items-center justify-between'>
-                <Label htmlFor='password' className='text-slate-300'>Contraseña</Label>
+                <Label htmlFor='password' className='text-slate-300 text-xs font-medium'>Contraseña</Label>
               </div>
               <Input
                 id='password'
@@ -86,7 +94,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className='bg-slate-950/60 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-orange-500'
+                className='bg-slate-950/70 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-blue-500'
               />
             </div>
           </CardContent>
@@ -94,7 +102,7 @@ export default function LoginPage() {
             <Button
               type='submit'
               disabled={loading}
-              className='w-full bg-orange-600 hover:bg-orange-500 text-white font-medium py-2 rounded-lg cursor-pointer transition-colors'
+              className='w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 rounded-lg cursor-pointer transition-all shadow-lg shadow-blue-600/30'
             >
               {loading ? (
                 <div className='flex items-center gap-2'>
@@ -105,8 +113,8 @@ export default function LoginPage() {
                 'Iniciar Sesión'
               )}
             </Button>
-            <p className='text-xs text-slate-500 text-center'>
-              Acceso seguro protegido con Supabase Auth & Dokploy
+            <p className='text-[11px] text-slate-500 text-center mt-1'>
+              Protegido con Supabase Auth & Dokploy • Contratos Digitales Inteligentes
             </p>
           </CardFooter>
         </form>

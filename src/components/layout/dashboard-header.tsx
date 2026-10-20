@@ -4,12 +4,13 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Button } from '@/components/ui/button';
+import { logoutAction } from '@/lib/actions';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -28,8 +29,8 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({
-  brandName = 'Press Cloud',
-  brandLogo = '/recurso.png',
+  brandName = 'ContractPress',
+  brandLogo = 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
   userEmail = 'qijoos3niievsik@gmail.com',
   isAdmin = true
 }: DashboardHeaderProps) {
@@ -49,12 +50,13 @@ export function DashboardHeader({
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      toast.success('Sesión cerrada');
-      router.push('/login');
-      router.refresh();
-    } catch {
-      toast.error('Error al cerrar sesión');
+      await supabase.auth.signOut().catch(() => {});
+      await logoutAction().catch(() => {});
+    } catch (err) {
+      console.warn('Logout notice:', err);
+    } finally {
+      toast.success('Sesión cerrada correctamente');
+      window.location.href = '/login';
     }
   };
 
@@ -68,24 +70,25 @@ export function DashboardHeader({
               <img
                 src={brandLogo}
                 alt='Logo'
-                className='h-8 w-8 object-contain rounded transition-transform group-hover:scale-105'
+                className='h-8 w-auto max-w-[180px] object-contain rounded transition-transform group-hover:scale-105'
                 onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
+                  (e.target as HTMLImageElement).src = '/icon.svg';
                 }}
               />
-            ) : null}
-            <div className='flex flex-col'>
-              <span className='font-bold text-lg leading-tight tracking-tight'>
-                {brandName}
-              </span>
-              <span className='text-[10px] text-muted-foreground uppercase tracking-wider font-semibold'>
-                Gestión de Contratos
-              </span>
-            </div>
+            ) : (
+              <div className='flex items-center gap-2'>
+                <div className='w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-500 font-bold'>
+                  ⚡
+                </div>
+                <span className='font-bold text-lg leading-tight tracking-tight'>
+                  {brandName}
+                </span>
+              </div>
+            )}
           </Link>
 
           {isUserAdmin ? (
-            <Badge variant='outline' className='ml-2 bg-orange-500/10 text-orange-500 border-orange-500/30 font-semibold text-[11px] px-2 py-0.5'>
+            <Badge variant='outline' className='ml-2 bg-blue-500/10 text-blue-500 border-blue-500/30 font-semibold text-[11px] px-2 py-0.5 shadow-sm'>
               ADMIN
             </Badge>
           ) : (
@@ -104,13 +107,11 @@ export function DashboardHeader({
 
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={
-                <Button variant='ghost' size='sm' className='flex items-center gap-2 pl-2 pr-3 py-1.5 h-auto rounded-full border border-border/50 hover:bg-muted/50 cursor-pointer' />
-              }
+              className='flex items-center gap-2 pl-2 pr-3 py-1.5 h-auto rounded-full border border-border/50 hover:bg-muted/50 cursor-pointer bg-background/60 text-foreground outline-none transition-all focus-visible:ring-2 focus-visible:ring-blue-500'
             >
-              <Avatar className='h-7 w-7 text-xs bg-primary/20 text-primary font-bold'>
+              <Avatar className='h-7 w-7 text-xs bg-blue-600/20 text-blue-500 font-bold border border-blue-500/30'>
                 <AvatarFallback>
-                  {currentUserEmail ? currentUserEmail.substring(0, 2).toUpperCase() : 'AD'}
+                  {currentUserEmail ? currentUserEmail.substring(0, 2).toUpperCase() : 'CP'}
                 </AvatarFallback>
               </Avatar>
               <span className='text-xs font-medium max-w-[140px] truncate hidden sm:inline-block'>
@@ -118,40 +119,46 @@ export function DashboardHeader({
               </span>
               <Icons.chevronDown className='h-3.5 w-3.5 text-muted-foreground' />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align='end' className='w-56 mt-1'>
-              <DropdownMenuLabel className='font-normal'>
-                <div className='flex flex-col space-y-1'>
-                  <p className='text-xs font-semibold leading-none text-foreground'>
-                    {isUserAdmin ? 'Administrador General' : 'Usuario de Agencia'}
-                  </p>
-                  <p className='text-xs leading-none text-muted-foreground truncate'>
-                    {currentUserEmail}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
+            <DropdownMenuContent align='end' className='w-56 mt-1 z-50 shadow-xl border border-border/60 bg-popover/95 backdrop-blur-md'>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className='font-normal'>
+                  <div className='flex flex-col space-y-1'>
+                    <p className='text-xs font-semibold leading-none text-foreground'>
+                      {isUserAdmin ? 'Super Administrador' : 'Usuario de Agencia'}
+                    </p>
+                    <p className='text-xs leading-none text-muted-foreground truncate'>
+                      {currentUserEmail}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className='text-xs cursor-pointer'
-                onClick={() => router.push('/dashboard/propuestas/crear')}
-              >
-                <Icons.add className='mr-2 h-4 w-4' />
-                Nueva Propuesta
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className='text-xs cursor-pointer'
-                onClick={() => router.push('/dashboard')}
-              >
-                <Icons.dashboard className='mr-2 h-4 w-4' />
-                Panel de Control
-              </DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  className='text-xs cursor-pointer'
+                  onClick={() => router.push('/dashboard/propuestas/crear')}
+                >
+                  <Icons.add className='mr-2 h-4 w-4 text-blue-500' />
+                  Nueva Propuesta
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className='text-xs cursor-pointer'
+                  onClick={() => router.push('/dashboard')}
+                >
+                  <Icons.dashboard className='mr-2 h-4 w-4' />
+                  Panel de Control
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className='text-xs text-destructive focus:text-destructive cursor-pointer'
-                onClick={handleLogout}
-              >
-                <Icons.logout className='mr-2 h-4 w-4' />
-                Cerrar Sesión
-              </DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  className='text-xs text-destructive focus:text-destructive cursor-pointer'
+                  onClick={handleLogout}
+                >
+                  <Icons.logout className='mr-2 h-4 w-4' />
+                  Cerrar Sesión
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

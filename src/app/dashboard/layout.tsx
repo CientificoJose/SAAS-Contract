@@ -17,8 +17,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     getCurrentUser()
   ]);
 
-  const brandName = settings.brand_name || 'Press Cloud';
-  const brandLogo = settings.brand_logo || '/recurso.png';
+  const brandName = settings.brand_name || 'ContractPress';
+  const brandLogo = settings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
   const userEmail = user?.email || 'qijoos3niievsik@gmail.com';
   const isAdmin = user?.role === 'admin' || userEmail === 'qijoos3niievsik@gmail.com';
 

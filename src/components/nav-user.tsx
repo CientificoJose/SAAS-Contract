@@ -19,6 +19,10 @@ import {
   useSidebar
 } from '@/components/ui/sidebar';
 
+import { createClient } from '@/lib/supabase/client';
+import { logoutAction } from '@/lib/actions';
+import { toast } from 'sonner';
+
 export function NavUser({
   user
 }: {
@@ -29,6 +33,16 @@ export function NavUser({
   };
 }) {
   const { isMobile } = useSidebar();
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut().catch(() => {});
+      await logoutAction().catch(() => {});
+    } catch {}
+    toast.success('Sesión cerrada');
+    window.location.href = '/login';
+  };
 
   return (
     <SidebarMenu>
@@ -96,9 +110,9 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem className='cursor-pointer text-destructive focus:text-destructive' onClick={handleLogout}>
                 <Icons.logout className='mr-2 h-4 w-4' />
-                Log out
+                Cerrar Sesión
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>
