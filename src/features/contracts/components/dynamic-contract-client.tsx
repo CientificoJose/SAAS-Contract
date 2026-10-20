@@ -43,7 +43,7 @@ export function DynamicContractClient({
   const primaryColor = proposal.brand_color_primary || globalSettings.color_primary || '#0066FF';
   const secondaryColor = proposal.brand_color_secondary || globalSettings.color_secondary || '#00F0FF';
   const logoUrl = proposal.brand_logo_url || globalSettings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
-  const brandName = globalSettings.brand_name || 'ContractPress';
+  const brandName = globalSettings.brand_name || 'ContractCloud';
 
   const displayFriendlyDate = (dateStr: string | undefined) => {
     if (!dateStr) return '';

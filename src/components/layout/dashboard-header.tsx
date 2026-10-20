@@ -29,7 +29,7 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({
-  brandName = 'ContractPress',
+  brandName = 'ContractCloud',
   brandLogo = 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
   userEmail = 'qijoos3niievsik@gmail.com',
   isAdmin = true

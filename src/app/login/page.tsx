@@ -58,7 +58,7 @@ export default function LoginPage() {
           <div className='mx-auto flex justify-center mb-1'>
             <img
               src='/logo.svg'
-              alt='ContractPress Logo'
+              alt='ContractCloud Logo'
               className='h-12 w-auto object-contain'
             />
           </div>

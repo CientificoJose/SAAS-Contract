@@ -91,7 +91,7 @@ export function ContractsDashboardClient({
 
   // Settings state
   const [settings, setSettings] = useState(initialSettings);
-  const [brandName, setBrandName] = useState(initialSettings.brand_name || 'ContractPress');
+  const [brandName, setBrandName] = useState(initialSettings.brand_name || 'ContractCloud');
   const [brandLogo, setBrandLogo] = useState(initialSettings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg');
   const [colorPrim, setColorPrim] = useState(initialSettings.color_primary || '#0066FF');
   const [colorSec, setColorSec] = useState(initialSettings.color_secondary || '#00F0FF');

@@ -633,7 +633,7 @@ export async function getSettings(): Promise<Record<string, string>> {
   try {
     const { data, error } = await supabaseAdmin.from('settings').select('*');
     const map: Record<string, string> = {
-      brand_name: 'ContractPress',
+      brand_name: 'ContractCloud',
       brand_logo: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
       color_primary: '#0066FF',
       color_secondary: '#00F0FF',
@@ -656,7 +656,7 @@ export async function getSettings(): Promise<Record<string, string>> {
   } catch (err) {
     console.error('Error fetching settings:', err);
     return {
-      brand_name: 'ContractPress',
+      brand_name: 'ContractCloud',
       brand_logo: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
       color_primary: '#0066FF',
       color_secondary: '#00F0FF',
@@ -700,7 +700,7 @@ export async function sendTestEmail(recipientEmail: string) {
     const port = parseInt(portStr);
     const user = settings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
     const pass = settings.smtp_pass || process.env.SMTP_PASS || '';
-    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractPress'}" <${user}>`;
+    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractCloud'}" <${user}>`;
 
     if (!host || !user) {
       throw new Error('Servidor SMTP no configurado');
@@ -722,14 +722,14 @@ export async function sendTestEmail(recipientEmail: string) {
     await transporter.sendMail({
       from,
       to: recipientEmail,
-      subject: `Prueba de configuración de correo - ${settings.brand_name || 'ContractPress'}`,
+      subject: `Prueba de configuración de correo - ${settings.brand_name || 'ContractCloud'}`,
       text: 'Este es un correo de prueba enviado desde tu gestor de contratos.',
       html: `<div style="font-family:sans-serif;padding:24px;max-width:550px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff;">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
           <h2 style="color:${settings.color_primary || '#0066FF'};margin:0;">¡Configuración Exitosa!</h2>
         </div>
         <p style="color:#334155;font-size:15px;line-height:1.6;">Tu servidor SMTP está listo para enviar propuestas comerciales y notificaciones de contratos a tus clientes.</p>
-        <p style="color:#64748b;font-size:13px;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:12px;">Enviado desde <strong>${settings.brand_name || 'ContractPress'}</strong> • contract.press-cloud.com</p>
+        <p style="color:#64748b;font-size:13px;margin-top:20px;border-top:1px solid #f1f5f9;padding-top:12px;">Enviado desde <strong>${settings.brand_name || 'ContractCloud'}</strong> • contract.press-cloud.com</p>
       </div>`
     });
 
@@ -754,7 +754,7 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
     const port = parseInt(portStr);
     const user = settings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
     const pass = settings.smtp_pass || process.env.SMTP_PASS || '';
-    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractPress'}" <${user}>`;
+    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractCloud'}" <${user}>`;
 
     if (!host || !user) {
       throw new Error('Servidor SMTP no configurado');
