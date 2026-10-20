@@ -29,6 +29,24 @@ export interface Proposal {
   grace_days?: number;
   late_fee_percentage?: number;
   daily_penalty_fee?: number;
+  user_id?: string;
+}
+
+export interface TenantProfile {
+  id: string;
+  email: string;
+  role: 'admin' | 'user';
+  full_name?: string;
+  tenant_name?: string;
+  brand_logo_url?: string;
+  brand_color_primary?: string;
+  brand_color_secondary?: string;
+  smtp_host?: string;
+  smtp_port?: string;
+  smtp_user?: string;
+  smtp_pass?: string;
+  smtp_from?: string;
+  created_at?: string;
 }
 
 export interface ProposalService {

@@ -22,6 +22,12 @@ interface DynamicContractClientProps {
   payments: ProposalPayment[];
   collaborators: ProposalCollaborator[];
   globalSettings?: Record<string, string>;
+  creatorProfile?: {
+    tenant_name?: string;
+    brand_logo_url?: string;
+    brand_color_primary?: string;
+    brand_color_secondary?: string;
+  } | null;
 }
 
 type SignatureData = {
@@ -35,15 +41,26 @@ export function DynamicContractClient({
   services,
   payments,
   collaborators,
-  globalSettings = {}
+  globalSettings = {},
+  creatorProfile
 }: DynamicContractClientProps) {
   const [activeTab, setActiveTab] = useState('servicios');
 
-  // Dynamic branding colors
-  const primaryColor = proposal.brand_color_primary || globalSettings.color_primary || '#0066FF';
-  const secondaryColor = proposal.brand_color_secondary || globalSettings.color_secondary || '#00F0FF';
-  const logoUrl = proposal.brand_logo_url || globalSettings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
-  const brandName = globalSettings.brand_name || 'ContractCloud';
+  // Dynamic branding colors & identity
+  const brandName = creatorProfile?.tenant_name || globalSettings.brand_name || 'ContractCloud';
+  const primaryColor = proposal.brand_color_primary || creatorProfile?.brand_color_primary || globalSettings.color_primary || '#0066FF';
+  const secondaryColor = proposal.brand_color_secondary || creatorProfile?.brand_color_secondary || globalSettings.color_secondary || '#00F0FF';
+  
+  const rawLogo =
+    proposal.brand_logo_url && proposal.brand_logo_url !== '/recurso.png'
+      ? proposal.brand_logo_url
+      : creatorProfile?.brand_logo_url && creatorProfile?.brand_logo_url !== '/recurso.png'
+      ? creatorProfile.brand_logo_url
+      : globalSettings.brand_logo ||
+        'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+
+  const [currentLogo, setCurrentLogo] = useState<string>(rawLogo);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const displayFriendlyDate = (dateStr: string | undefined) => {
     if (!dateStr) return '';
@@ -288,13 +305,24 @@ export function DynamicContractClient({
               </p>
             </div>
             <div className='flex flex-col items-center sm:items-end'>
-              {logoUrl ? (
+              {!logoFailed && currentLogo ? (
                 <img
-                  src={logoUrl}
+                  src={currentLogo}
                   alt={brandName}
-                  className='h-10 w-auto object-contain max-w-[160px]'
+                  className='h-10 w-auto object-contain max-w-[180px]'
+                  onError={() => {
+                    if (currentLogo !== '/logo.svg') {
+                      setCurrentLogo('/logo.svg');
+                    } else {
+                      setLogoFailed(true);
+                    }
+                  }}
                 />
-              ) : null}
+              ) : (
+                <div className='flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200'>
+                  <span className='text-sm font-black tracking-tight text-slate-800'>{brandName}</span>
+                </div>
+              )}
               <p className='mt-1 text-xs font-bold text-slate-700'>{brandName}</p>
             </div>
           </div>

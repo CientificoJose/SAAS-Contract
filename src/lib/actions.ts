@@ -27,14 +27,99 @@ export async function getCurrentUser() {
     const supabase = await createClient();
     const { data: { user }, error } = await supabase.auth.getUser();
     if (error || !user) return null;
+
+    // Fetch tenant profile
+    let profile: any = null;
+    const { data: profData } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (profData) {
+      profile = profData;
+    } else {
+      // Create initial profile if missing
+      const newProf = {
+        id: user.id,
+        email: user.email || '',
+        role: user.email === ADMIN_EMAIL ? 'admin' : 'user',
+        full_name: (user.user_metadata?.full_name as string) || (user.email ? user.email.split('@')[0] : 'Usuario'),
+        tenant_name: (user.user_metadata?.tenant_name as string) || 'ContractCloud',
+        brand_logo_url: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
+        brand_color_primary: '#0066FF',
+        brand_color_secondary: '#00F0FF'
+      };
+      try {
+        await supabaseAdmin.from('profiles').insert(newProf);
+      } catch {}
+      profile = newProf;
+    }
+
     return {
       id: user.id,
       email: user.email || '',
-      role: user.email === ADMIN_EMAIL ? 'admin' : 'user',
+      role: (profile?.role || (user.email === ADMIN_EMAIL ? 'admin' : 'user')) as 'admin' | 'user',
+      profile,
       user_metadata: user.user_metadata || {}
     };
   } catch {
     return null;
+  }
+}
+
+export async function getTenantProfile(userId?: string) {
+  try {
+    let targetId = userId;
+    if (!targetId) {
+      const cur = await getCurrentUser();
+      if (!cur) return null;
+      targetId = cur.id;
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', targetId)
+      .single();
+
+    return profile;
+  } catch (err) {
+    console.error('Error in getTenantProfile:', err);
+    return null;
+  }
+}
+
+export async function updateTenantProfile(data: {
+  tenant_name?: string;
+  brand_logo_url?: string;
+  brand_color_primary?: string;
+  brand_color_secondary?: string;
+  full_name?: string;
+  smtp_host?: string;
+  smtp_port?: string;
+  smtp_user?: string;
+  smtp_pass?: string;
+  smtp_from?: string;
+}) {
+  try {
+    const cur = await getCurrentUser();
+    if (!cur) throw new Error('No autorizado');
+
+    const { error } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        ...data,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', cur.id);
+
+    if (error) throw error;
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error updating tenant profile:', err);
+    throw new Error(err.message || 'Error al actualizar el perfil del tenant');
   }
 }
 
@@ -98,10 +183,18 @@ export async function uploadAsset(formData: FormData): Promise<{ url: string }> 
 
 export async function getProposals(): Promise<(Proposal & { services?: ProposalService[] })[]> {
   try {
-    const { data: proposals, error: pError } = await supabaseAdmin
+    const cur = await getCurrentUser();
+    let query = supabaseAdmin
       .from('proposals')
       .select('*')
       .order('created_at', { ascending: false });
+
+    // Multi-tenant scoping: if not admin, only fetch current tenant's proposals
+    if (cur && cur.role !== 'admin') {
+      query = query.eq('user_id', cur.id);
+    }
+
+    const { data: proposals, error: pError } = await query;
 
     if (pError || !proposals) {
       console.error('Error fetching proposals:', pError);
@@ -118,6 +211,10 @@ export async function getProposals(): Promise<(Proposal & { services?: ProposalS
 
     return proposals.map((p) => ({
       ...p,
+      // Fix any legacy /recurso.png or empty logo references
+      brand_logo_url: p.brand_logo_url && p.brand_logo_url !== '/recurso.png'
+        ? p.brand_logo_url
+        : 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
       services: services.filter((s) => s.proposal_id === p.id)
     })) as (Proposal & { services?: ProposalService[] })[];
   } catch (err) {
@@ -132,6 +229,7 @@ export async function getProposalById(id: string): Promise<{
   services: ProposalService[];
   payments: ProposalPayment[];
   collaborators: ProposalCollaborator[];
+  creatorProfile?: any | null;
 }> {
   try {
     const { data: proposal, error: pError } = await supabaseAdmin
@@ -141,7 +239,23 @@ export async function getProposalById(id: string): Promise<{
       .single();
 
     if (pError || !proposal) {
-      return { proposal: null, credentials: [], services: [], payments: [], collaborators: [] };
+      return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null };
+    }
+
+    // Fix legacy /recurso.png
+    if (proposal.brand_logo_url === '/recurso.png' || !proposal.brand_logo_url) {
+      proposal.brand_logo_url = 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+    }
+
+    // Fetch creator tenant profile if user_id is present
+    let creatorProfile: any = null;
+    if (proposal.user_id) {
+      const { data: prof } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('id', proposal.user_id)
+        .single();
+      creatorProfile = prof;
     }
 
     const [credsRes, servicesRes, paymentsRes, collabRes] = await Promise.all([
@@ -156,11 +270,12 @@ export async function getProposalById(id: string): Promise<{
       credentials: (credsRes.data || []) as Credential[],
       services: (servicesRes.data || []) as ProposalService[],
       payments: (paymentsRes.data || []) as ProposalPayment[],
-      collaborators: (collabRes.data || []) as ProposalCollaborator[]
+      collaborators: (collabRes.data || []) as ProposalCollaborator[],
+      creatorProfile
     };
   } catch (err) {
     console.error('Error in getProposalById:', err);
-    return { proposal: null, credentials: [], services: [], payments: [], collaborators: [] };
+    return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null };
   }
 }
 
@@ -187,13 +302,26 @@ export async function createProposal(data: {
   collaborators?: ProposalCollaborator[];
 }) {
   try {
+    const cur = await getCurrentUser();
+    const userId = cur ? cur.id : null;
+    const tenantProf = cur?.profile;
+
     const proposalId = data.id || `prop-${Date.now()}`;
     const totalAmount = data.services.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
 
     const firstService = data.services[0];
 
+    const brandLogo =
+      data.brand_logo_url && data.brand_logo_url !== '/recurso.png'
+        ? data.brand_logo_url
+        : tenantProf?.brand_logo_url || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+
+    const brandPrimary = data.brand_color_primary || tenantProf?.brand_color_primary || '#0066FF';
+    const brandSecondary = data.brand_color_secondary || tenantProf?.brand_color_secondary || '#00F0FF';
+
     const { error: pError } = await supabaseAdmin.from('proposals').insert({
       id: proposalId,
+      user_id: userId,
       client_name: data.client_name,
       client_company: data.client_company,
       client_domain: data.client_domain || '',
@@ -206,9 +334,9 @@ export async function createProposal(data: {
       payment_date: data.payment_date || new Date().toISOString().split('T')[0],
       payment_method: data.payment_method || 'Transferencia',
       payment_amount: data.payment_amount || 0,
-      brand_color_primary: data.brand_color_primary || '',
-      brand_color_secondary: data.brand_color_secondary || '',
-      brand_logo_url: data.brand_logo_url || '',
+      brand_color_primary: brandPrimary,
+      brand_color_secondary: brandSecondary,
+      brand_logo_url: brandLogo,
       grace_days: data.grace_days || 0,
       late_fee_percentage: data.late_fee_percentage || 0,
       daily_penalty_fee: data.daily_penalty_fee || 0,
@@ -631,7 +759,8 @@ export async function deleteServicePlan(id: string) {
 
 export async function getSettings(): Promise<Record<string, string>> {
   try {
-    const { data, error } = await supabaseAdmin.from('settings').select('*');
+    const cur = await getCurrentUser();
+    const { data } = await supabaseAdmin.from('settings').select('*');
     const map: Record<string, string> = {
       brand_name: 'ContractCloud',
       brand_logo: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
@@ -650,6 +779,20 @@ export async function getSettings(): Promise<Record<string, string>> {
           map[row.key] = row.value;
         }
       });
+    }
+
+    // Merge tenant profile if user is authenticated
+    if (cur?.profile) {
+      const p = cur.profile;
+      if (p.tenant_name) map.brand_name = p.tenant_name;
+      if (p.brand_logo_url && p.brand_logo_url !== '/recurso.png') map.brand_logo = p.brand_logo_url;
+      if (p.brand_color_primary) map.color_primary = p.brand_color_primary;
+      if (p.brand_color_secondary) map.color_secondary = p.brand_color_secondary;
+      if (p.smtp_host) map.smtp_host = p.smtp_host;
+      if (p.smtp_port) map.smtp_port = p.smtp_port;
+      if (p.smtp_user) map.smtp_user = p.smtp_user;
+      if (p.smtp_pass) map.smtp_pass = p.smtp_pass;
+      if (p.smtp_from) map.smtp_from = p.smtp_from;
     }
 
     return map;
@@ -671,13 +814,33 @@ export async function getSettings(): Promise<Record<string, string>> {
 
 export async function updateSettings(settings: Record<string, string>) {
   try {
-    const entries = Object.entries(settings).map(([key, value]) => ({
-      key,
-      value: value || ''
-    }));
+    const cur = await getCurrentUser();
 
-    for (const item of entries) {
-      await supabaseAdmin.from('settings').upsert(item, { onConflict: 'key' });
+    // 1. If logged in, persist to tenant profile in profiles table
+    if (cur) {
+      await updateTenantProfile({
+        tenant_name: settings.brand_name,
+        brand_logo_url: settings.brand_logo,
+        brand_color_primary: settings.color_primary,
+        brand_color_secondary: settings.color_secondary,
+        smtp_host: settings.smtp_host,
+        smtp_port: settings.smtp_port,
+        smtp_user: settings.smtp_user,
+        smtp_pass: settings.smtp_pass,
+        smtp_from: settings.smtp_from
+      });
+    }
+
+    // 2. If admin or system fallback, update global settings table
+    if (!cur || cur.role === 'admin') {
+      const entries = Object.entries(settings).map(([key, value]) => ({
+        key,
+        value: value || ''
+      }));
+
+      for (const item of entries) {
+        await supabaseAdmin.from('settings').upsert(item, { onConflict: 'key' });
+      }
     }
 
     revalidatePath('/dashboard');
@@ -742,19 +905,22 @@ export async function sendTestEmail(recipientEmail: string) {
 
 export async function sendProposalEmail(proposalId: string, recipientEmail: string) {
   try {
-    const [{ proposal }, settings] = await Promise.all([
+    const [{ proposal, creatorProfile }, globalSettings] = await Promise.all([
       getProposalById(proposalId),
       getSettings()
     ]);
 
     if (!proposal) throw new Error('Propuesta no encontrada');
 
-    const host = settings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
-    const portStr = settings.smtp_port || process.env.SMTP_PORT || '465';
+    // Tenant-aware SMTP credentials & branding
+    const host = creatorProfile?.smtp_host || globalSettings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
+    const portStr = creatorProfile?.smtp_port || globalSettings.smtp_port || process.env.SMTP_PORT || '465';
     const port = parseInt(portStr);
-    const user = settings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
-    const pass = settings.smtp_pass || process.env.SMTP_PASS || '';
-    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractCloud'}" <${user}>`;
+    const user = creatorProfile?.smtp_user || globalSettings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
+    const pass = creatorProfile?.smtp_pass || globalSettings.smtp_pass || process.env.SMTP_PASS || '';
+    const brandName = creatorProfile?.tenant_name || globalSettings.brand_name || 'ContractCloud';
+    const primaryColor = proposal.brand_color_primary || creatorProfile?.brand_color_primary || globalSettings.color_primary || '#0066FF';
+    const from = creatorProfile?.smtp_from || globalSettings.smtp_from || process.env.SMTP_FROM || `"${brandName}" <${user}>`;
 
     if (!host || !user) {
       throw new Error('Servidor SMTP no configurado');
@@ -781,17 +947,17 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
       subject: `Propuesta Comercial #${proposal.invoice_number} - ${proposal.client_company}`,
       html: `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;padding:28px;background:#ffffff;">
-          <h2 style="color:${settings.color_primary || '#0066FF'};margin-top:0;">Propuesta de Servicios y Contrato Comercial</h2>
+          <h2 style="color:${primaryColor};margin-top:0;">Propuesta de Servicios y Contrato Comercial</h2>
           <p>Hola <strong>${proposal.client_name}</strong> (${proposal.client_company}),</p>
           <p>Se ha generado la propuesta comercial número <strong>#${proposal.invoice_number}</strong> para tus servicios contratados.</p>
           <p>Puedes revisar los alcances detallados, formas de pago y formalizar con firma digital desde nuestro portal interactivo:</p>
           <div style="text-align:center;margin:32px 0;">
-            <a href="${proposalUrl}" style="background-color:${settings.color_primary || '#0066FF'};color:#ffffff;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+            <a href="${proposalUrl}" style="background-color:${primaryColor};color:#ffffff;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
               Ver Propuesta y Contrato Comercial
             </a>
           </div>
           <p style="font-size:12px;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:16px;">
-            Este enlace es único y seguro para ${proposal.client_company}.
+            Este enlace es único y seguro para ${proposal.client_company} emitido por <strong>${brandName}</strong>.
           </p>
         </div>
       `

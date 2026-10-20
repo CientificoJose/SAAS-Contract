@@ -11,7 +11,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const { proposal } = await getProposalById(id);
+  const { proposal, creatorProfile } = await getProposalById(id);
 
   if (!proposal) {
     return {
@@ -20,16 +20,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
+  const providerName = creatorProfile?.tenant_name || 'ContractCloud';
+
   return {
-    title: `Propuesta Comercial #${proposal.invoice_number} - ${proposal.client_company}`,
-    description: `Contrato de servicios para ${proposal.client_company} (${proposal.client_name})`,
+    title: `Propuesta Comercial #${proposal.invoice_number} - ${proposal.client_company} | ${providerName}`,
+    description: `Contrato de servicios para ${proposal.client_company} (${proposal.client_name}) emitido por ${providerName}`,
     robots: { index: false, follow: false }
   };
 }
 
 export default async function PublicProposalPage({ params }: Props) {
   const { id } = await params;
-  const [{ proposal, credentials, services, payments, collaborators }, settings] = await Promise.all([
+  const [{ proposal, credentials, services, payments, collaborators, creatorProfile }, settings] = await Promise.all([
     getProposalById(id),
     getSettings()
   ]);
@@ -46,6 +48,7 @@ export default async function PublicProposalPage({ params }: Props) {
       payments={payments}
       collaborators={collaborators}
       globalSettings={settings}
+      creatorProfile={creatorProfile}
     />
   );
 }

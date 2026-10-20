@@ -6,7 +6,8 @@ import Link from 'next/link';
 import {
   createProposal,
   getCatalog,
-  uploadAsset
+  uploadAsset,
+  getSettings
 } from '@/lib/actions';
 import type {
   CatalogCategory,
@@ -134,6 +135,23 @@ export default function CrearPropuestaPage() {
           }
         ]);
       }
+    });
+  }, []);
+
+  // Prefill branding with current tenant settings
+  useEffect(() => {
+    getSettings().then((st) => {
+      if (st.brand_logo && st.brand_logo !== '/recurso.png') {
+        setBrandLogoUrl(st.brand_logo);
+      }
+      if (st.color_primary) {
+        setBrandColorPrimary(st.color_primary);
+      }
+      if (st.color_secondary) {
+        setBrandColorSecondary(st.color_secondary);
+      }
+    }).catch((err) => {
+      console.warn('Could not load tenant settings for proposal creation', err);
     });
   }, []);
 
