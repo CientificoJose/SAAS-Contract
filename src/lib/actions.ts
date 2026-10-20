@@ -13,8 +13,10 @@ import type {
   Credential,
   CatalogCategory,
   CatalogService,
-  CatalogServicePlan
+  CatalogServicePlan,
+  PaymentMethodConfig
 } from './supabase/types';
+import { DEFAULT_PAYMENT_METHODS } from './constants/payment-methods';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'qijoos3niievsik@gmail.com';
 
@@ -230,6 +232,7 @@ export async function getProposalById(id: string): Promise<{
   payments: ProposalPayment[];
   collaborators: ProposalCollaborator[];
   creatorProfile?: any | null;
+  paymentMethods: PaymentMethodConfig[];
 }> {
   try {
     const { data: proposal, error: pError } = await supabaseAdmin
@@ -239,7 +242,7 @@ export async function getProposalById(id: string): Promise<{
       .single();
 
     if (pError || !proposal) {
-      return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null };
+      return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null, paymentMethods: [] };
     }
 
     // Fix legacy /recurso.png
@@ -258,11 +261,12 @@ export async function getProposalById(id: string): Promise<{
       creatorProfile = prof;
     }
 
-    const [credsRes, servicesRes, paymentsRes, collabRes] = await Promise.all([
+    const [credsRes, servicesRes, paymentsRes, collabRes, pMethods] = await Promise.all([
       supabaseAdmin.from('credentials').select('*').eq('proposal_id', id),
       supabaseAdmin.from('proposal_services').select('*').eq('proposal_id', id),
       supabaseAdmin.from('proposal_payments').select('*').eq('proposal_id', id).order('payment_date', { ascending: true }),
-      supabaseAdmin.from('proposal_collaborators').select('*').eq('proposal_id', id)
+      supabaseAdmin.from('proposal_collaborators').select('*').eq('proposal_id', id),
+      getPaymentMethods(proposal.user_id)
     ]);
 
     return {
@@ -271,11 +275,12 @@ export async function getProposalById(id: string): Promise<{
       services: (servicesRes.data || []) as ProposalService[],
       payments: (paymentsRes.data || []) as ProposalPayment[],
       collaborators: (collabRes.data || []) as ProposalCollaborator[],
-      creatorProfile
+      creatorProfile,
+      paymentMethods: pMethods || []
     };
   } catch (err) {
     console.error('Error in getProposalById:', err);
-    return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null };
+    return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null, paymentMethods: [] };
   }
 }
 
@@ -848,6 +853,81 @@ export async function updateSettings(settings: Record<string, string>) {
   } catch (err: any) {
     console.error('Error updating settings:', err);
     throw new Error(err.message || 'Error al guardar ajustes');
+  }
+}
+
+// ==========================================
+// PAYMENT METHODS MANAGEMENT
+// ==========================================
+
+
+export async function getPaymentMethods(targetUserId?: string): Promise<PaymentMethodConfig[]> {
+  try {
+    const cur = targetUserId ? { id: targetUserId } : await getCurrentUser();
+    const userId = cur?.id;
+    const key = userId ? `payment_methods_${userId}` : 'payment_methods_global';
+
+    const { data } = await supabaseAdmin
+      .from('settings')
+      .select('value')
+      .eq('key', key)
+      .single();
+
+    if (data?.value) {
+      try {
+        const parsed = JSON.parse(data.value);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch {}
+    }
+
+    // Try global settings fallback
+    if (userId) {
+      const { data: globalData } = await supabaseAdmin
+        .from('settings')
+        .select('value')
+        .eq('key', 'payment_methods_global')
+        .single();
+      if (globalData?.value) {
+        try {
+          const parsedGlobal = JSON.parse(globalData.value);
+          if (Array.isArray(parsedGlobal) && parsedGlobal.length > 0) {
+            return parsedGlobal;
+          }
+        } catch {}
+      }
+    }
+
+    return DEFAULT_PAYMENT_METHODS;
+  } catch (err) {
+    console.error('Error fetching payment methods:', err);
+    return DEFAULT_PAYMENT_METHODS;
+  }
+}
+
+export async function savePaymentMethods(methods: PaymentMethodConfig[]) {
+  try {
+    const cur = await getCurrentUser();
+    const key = cur?.id ? `payment_methods_${cur.id}` : 'payment_methods_global';
+
+    await supabaseAdmin.from('settings').upsert({
+      key,
+      value: JSON.stringify(methods)
+    }, { onConflict: 'key' });
+
+    if (!cur || cur.role === 'admin') {
+      await supabaseAdmin.from('settings').upsert({
+        key: 'payment_methods_global',
+        value: JSON.stringify(methods)
+      }, { onConflict: 'key' });
+    }
+
+    revalidatePath('/dashboard');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error saving payment methods:', err);
+    throw new Error(err.message || 'Error al guardar los métodos de pago');
   }
 }
 

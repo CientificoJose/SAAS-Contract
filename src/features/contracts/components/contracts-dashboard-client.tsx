@@ -19,16 +19,20 @@ import {
   sendTestEmail,
   sendProposalEmail,
   getProposalById,
-  uploadAsset
+  uploadAsset,
+  savePaymentMethods
 } from '@/lib/actions';
+import { DEFAULT_PAYMENT_METHODS } from '@/lib/constants/payment-methods';
 import type {
   Proposal,
   ProposalService,
   CatalogCategory,
   Credential,
   ProposalPayment,
-  ProposalCollaborator
+  ProposalCollaborator,
+  PaymentMethodConfig
 } from '@/lib/supabase/types';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -73,6 +77,7 @@ interface ContractsDashboardClientProps {
   initialProposals: (Proposal & { services?: ProposalService[] })[];
   initialCatalog: CatalogCategory[];
   initialSettings: Record<string, string>;
+  initialPaymentMethods?: PaymentMethodConfig[];
   userRole?: string;
 }
 
@@ -80,6 +85,7 @@ export function ContractsDashboardClient({
   initialProposals,
   initialCatalog,
   initialSettings,
+  initialPaymentMethods,
   userRole = 'admin'
 }: ContractsDashboardClientProps) {
   const router = useRouter();
@@ -167,6 +173,31 @@ export function ContractsDashboardClient({
   const [editPlanDuration, setEditPlanDuration] = useState('');
   const [editPlanFeatures, setEditPlanFeatures] = useState('');
   const [editPlanPolicies, setEditPlanPolicies] = useState('');
+
+  // Payment Methods state
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>(
+    initialPaymentMethods && initialPaymentMethods.length > 0
+      ? initialPaymentMethods
+      : DEFAULT_PAYMENT_METHODS
+  );
+  const [selectedMethodForEdit, setSelectedMethodForEdit] = useState<PaymentMethodConfig | null>(null);
+  const [editMethodModalOpen, setEditMethodModalOpen] = useState(false);
+  const [createMethodModalOpen, setCreateMethodModalOpen] = useState(false);
+
+  // New Custom Method Form State
+  const [newMethodName, setNewMethodName] = useState('');
+  const [newMethodType, setNewMethodType] = useState<'zelle' | 'binance' | 'bank_transfer' | 'custom'>('custom');
+  const [newMethodLogo, setNewMethodLogo] = useState('/logos/bank.svg');
+  const [newMethodHolder, setNewMethodHolder] = useState('');
+  const [newMethodEmail, setNewMethodEmail] = useState('');
+  const [newMethodBinanceId, setNewMethodBinanceId] = useState('');
+  const [newMethodWallet, setNewMethodWallet] = useState('');
+  const [newMethodNetwork, setNewMethodNetwork] = useState('USDT (Red TRC-20)');
+  const [newMethodBank, setNewMethodBank] = useState('');
+  const [newMethodAccount, setNewMethodAccount] = useState('');
+  const [newMethodRouting, setNewMethodRouting] = useState('');
+  const [newMethodInstructions, setNewMethodInstructions] = useState('');
+  const [isUploadingMethodLogo, setIsUploadingMethodLogo] = useState(false);
 
   // Sincronizar props
   React.useEffect(() => {
@@ -515,6 +546,120 @@ export function ContractsDashboardClient({
     }
   };
 
+  // ==========================================
+  // HANDLERS: PAYMENT METHODS
+  // ==========================================
+
+  const handleTogglePaymentMethod = async (id: string) => {
+    const updated = paymentMethods.map((m) =>
+      m.id === id ? { ...m, enabled: !m.enabled } : m
+    );
+    setPaymentMethods(updated);
+    try {
+      await savePaymentMethods(updated);
+      toast.success('Estado del método de pago actualizado');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al actualizar');
+    }
+  };
+
+  const handleSaveEditedPaymentMethod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedMethodForEdit) return;
+    try {
+      const updated = paymentMethods.map((m) =>
+        m.id === selectedMethodForEdit.id ? selectedMethodForEdit : m
+      );
+      setPaymentMethods(updated);
+      await savePaymentMethods(updated);
+      toast.success('Método de pago guardado con éxito');
+      setEditMethodModalOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Error al guardar');
+    }
+  };
+
+  const handleCreateMethodSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMethodName.trim()) {
+      toast.error('Ingresa un nombre para el método de pago');
+      return;
+    }
+
+    const newMethod: PaymentMethodConfig = {
+      id: `pm-${Date.now()}`,
+      name: newMethodName.trim(),
+      type: newMethodType,
+      logo_url: newMethodLogo || '/logos/bank.svg',
+      enabled: true,
+      account_holder: newMethodHolder.trim() || undefined,
+      account_email: newMethodEmail.trim() || undefined,
+      binance_id: newMethodBinanceId.trim() || undefined,
+      wallet_address: newMethodWallet.trim() || undefined,
+      network: newMethodNetwork.trim() || undefined,
+      bank_name: newMethodBank.trim() || undefined,
+      account_number: newMethodAccount.trim() || undefined,
+      routing_number: newMethodRouting.trim() || undefined,
+      instructions: newMethodInstructions.trim() || undefined
+    };
+
+    try {
+      const updated = [...paymentMethods, newMethod];
+      setPaymentMethods(updated);
+      await savePaymentMethods(updated);
+      toast.success('Nuevo método de pago agregado con éxito');
+      setCreateMethodModalOpen(false);
+      setNewMethodName('');
+      setNewMethodType('custom');
+      setNewMethodLogo('/logos/bank.svg');
+      setNewMethodHolder('');
+      setNewMethodEmail('');
+      setNewMethodBinanceId('');
+      setNewMethodWallet('');
+      setNewMethodBank('');
+      setNewMethodAccount('');
+      setNewMethodRouting('');
+      setNewMethodInstructions('');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al crear método');
+    }
+  };
+
+  const handleDeletePaymentMethod = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este método de pago?')) return;
+    try {
+      const updated = paymentMethods.filter((m) => m.id !== id);
+      setPaymentMethods(updated);
+      await savePaymentMethods(updated);
+      toast.success('Método de pago eliminado');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al eliminar');
+    }
+  };
+
+  const handleMethodLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>, isNew: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingMethodLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al subir imagen');
+      if (isNew) {
+        setNewMethodLogo(data.url);
+      } else if (selectedMethodForEdit) {
+        setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: data.url });
+      }
+      toast.success('Logo subido correctamente');
+    } catch (err: any) {
+      toast.error(err.message || 'Error al subir archivo');
+    } finally {
+      setIsUploadingMethodLogo(false);
+    }
+  };
+
   // Calculations for KPI Cards
   const totalInvoiced = proposals.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
   const totalPaid = proposals.filter((p) => p.payment_status === 'PAGADO').length;
@@ -616,6 +761,13 @@ export function ContractsDashboardClient({
             >
               <Icons.settings className='h-3.5 w-3.5' />
               <span>Ajustes de Marca</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value='metodos_pago'
+              className='px-4 py-2 text-sm font-medium rounded-lg data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm cursor-pointer flex items-center gap-1.5'
+            >
+              <Icons.creditCard className='h-3.5 w-3.5' />
+              <span>Métodos de Pago ({paymentMethods.filter((m) => m.enabled).length})</span>
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1256,6 +1408,163 @@ export function ContractsDashboardClient({
             </div>
           </form>
         </TabsContent>
+
+        {/* ======================================================== */}
+        {/* TAB 5: MÉTODOS DE PAGO (ZELLE, BINANCE, BANCO, CUSTOM) */}
+        {/* ======================================================== */}
+        <TabsContent value='metodos_pago' className='space-y-6'>
+          <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
+            <div>
+              <h2 className='text-xl font-bold tracking-tight text-foreground flex items-center gap-2'>
+                <Icons.creditCard className='h-5 w-5 text-primary' />
+                <span>Canales y Cuentas de Cobro</span>
+              </h2>
+              <p className='text-xs text-muted-foreground mt-1'>
+                Configura los métodos de pago (Zelle, Binance Pay, cuentas bancarias o personalizados) que tus clientes verán para pagar sus contratos.
+              </p>
+            </div>
+            <Button
+              type='button'
+              onClick={() => setCreateMethodModalOpen(true)}
+              className='bg-primary text-primary-foreground hover:bg-primary/90 font-semibold text-xs flex items-center gap-2 cursor-pointer shadow-sm'
+            >
+              <Icons.add className='h-4 w-4' />
+              <span>Nuevo Método Personalizado</span>
+            </Button>
+          </div>
+
+          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5'>
+            {paymentMethods.map((pm) => (
+              <Card
+                key={pm.id}
+                className={`border transition-all duration-200 flex flex-col justify-between ${
+                  pm.enabled
+                    ? 'border-border/80 bg-card/80 shadow-sm'
+                    : 'border-border/40 bg-muted/20 opacity-70'
+                }`}
+              >
+                <CardHeader className='pb-3'>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='flex items-center gap-3'>
+                      <div className='w-11 h-11 rounded-xl bg-slate-950 p-2 flex items-center justify-center shrink-0 border border-slate-800 shadow-inner'>
+                        <img
+                          src={pm.logo_url}
+                          alt={pm.name}
+                          className='max-h-full max-w-full object-contain'
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/logos/bank.svg';
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <CardTitle className='text-base font-bold text-foreground'>{pm.name}</CardTitle>
+                        <span className='text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary mt-1 inline-block'>
+                          {pm.type === 'zelle' ? 'Zelle USA' : pm.type === 'binance' ? 'Binance Pay / Cripto' : pm.type === 'bank_transfer' ? 'Banca Tradicional' : 'Personalizado'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                      <Switch
+                        checked={pm.enabled}
+                        onCheckedChange={() => handleTogglePaymentMethod(pm.id)}
+                        title={pm.enabled ? 'Método activo' : 'Método desactivado'}
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className='space-y-2.5 text-xs text-muted-foreground flex-1'>
+                  <div className='p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5'>
+                    {pm.account_email && (
+                      <div className='flex justify-between gap-2'>
+                        <span className='text-foreground/70'>Correo:</span>
+                        <span className='font-mono font-medium text-foreground truncate max-w-[170px]'>{pm.account_email}</span>
+                      </div>
+                    )}
+                    {pm.account_holder && (
+                      <div className='flex justify-between gap-2'>
+                        <span className='text-foreground/70'>Titular:</span>
+                        <span className='font-medium text-foreground truncate max-w-[170px]'>{pm.account_holder}</span>
+                      </div>
+                    )}
+                    {pm.binance_id && (
+                      <div className='flex justify-between gap-2'>
+                        <span className='text-foreground/70'>Pay ID:</span>
+                        <span className='font-mono font-bold text-amber-500'>{pm.binance_id}</span>
+                      </div>
+                    )}
+                    {pm.network && (
+                      <div className='flex justify-between gap-2'>
+                        <span className='text-foreground/70'>Red:</span>
+                        <span className='font-semibold text-foreground'>{pm.network}</span>
+                      </div>
+                    )}
+                    {pm.wallet_address && (
+                      <div className='space-y-0.5 pt-1 border-t border-border/40'>
+                        <span className='text-foreground/70 text-[10px] block'>Billetera:</span>
+                        <span className='font-mono text-[10px] text-foreground break-all block bg-background/60 p-1 rounded'>
+                          {pm.wallet_address}
+                        </span>
+                      </div>
+                    )}
+                    {pm.bank_name && (
+                      <div className='flex justify-between gap-2'>
+                        <span className='text-foreground/70'>Banco:</span>
+                        <span className='font-medium text-foreground'>{pm.bank_name}</span>
+                      </div>
+                    )}
+                    {pm.account_number && (
+                      <div className='flex justify-between gap-2'>
+                        <span className='text-foreground/70'>Cuenta:</span>
+                        <span className='font-mono font-medium text-foreground truncate max-w-[160px]'>{pm.account_number}</span>
+                      </div>
+                    )}
+                    {pm.routing_number && (
+                      <div className='flex justify-between gap-2'>
+                        <span className='text-foreground/70'>Doc / RIF:</span>
+                        <span className='font-mono text-foreground'>{pm.routing_number}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {pm.instructions && (
+                    <p className='text-[11px] italic line-clamp-2 text-muted-foreground/80'>
+                      "{pm.instructions}"
+                    </p>
+                  )}
+                </CardContent>
+
+                <CardFooter className='pt-2 pb-4 flex items-center justify-between border-t border-border/40 mt-2'>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    onClick={() => {
+                      setSelectedMethodForEdit({ ...pm });
+                      setEditMethodModalOpen(true);
+                    }}
+                    className='text-xs font-semibold cursor-pointer'
+                  >
+                    <Icons.edit className='h-3.5 w-3.5 mr-1 text-primary' />
+                    Editar Datos
+                  </Button>
+
+                  {pm.type === 'custom' && (
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='sm'
+                      onClick={() => handleDeletePaymentMethod(pm.id)}
+                      className='text-xs text-destructive hover:text-destructive/80 cursor-pointer'
+                    >
+                      <Icons.trash className='h-3.5 w-3.5' />
+                    </Button>
+                  )}
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* ======================================================== */}
@@ -1789,6 +2098,394 @@ export function ContractsDashboardClient({
               </Button>
               <Button type='submit' className='bg-primary font-medium'>
                 Guardar Cambios
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ======================================================== */}
+      {/* MODAL: EDITAR MÉTODO DE PAGO */}
+      {/* ======================================================== */}
+      <Dialog open={editMethodModalOpen} onOpenChange={setEditMethodModalOpen}>
+        <DialogContent className='sm:max-w-lg max-h-[90vh] overflow-y-auto'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2'>
+              <Icons.creditCard className='h-5 w-5 text-primary' />
+              <span>Editar Método de Pago: {selectedMethodForEdit?.name}</span>
+            </DialogTitle>
+            <DialogDescription>
+              Modifica los datos que tus clientes verán al momento de realizar el pago
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedMethodForEdit && (
+            <form onSubmit={handleSaveEditedPaymentMethod} className='space-y-4 py-2'>
+              <div className='space-y-2'>
+                <Label>Nombre del Método</Label>
+                <Input
+                  required
+                  value={selectedMethodForEdit.name}
+                  onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, name: e.target.value })}
+                />
+              </div>
+
+              {/* Logo selector / uploader */}
+              <div className='p-3 rounded-xl border border-border/60 bg-muted/20 space-y-3'>
+                <div className='flex items-center justify-between'>
+                  <Label className='text-xs font-semibold'>Logo del Método</Label>
+                  <div className='flex items-center gap-1.5'>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='xs'
+                      onClick={() => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: '/logos/zelle.svg' })}
+                      className='text-[10px] px-1.5 py-0.5 h-6'
+                    >
+                      Zelle
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='xs'
+                      onClick={() => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: '/logos/binance.svg' })}
+                      className='text-[10px] px-1.5 py-0.5 h-6'
+                    >
+                      Binance
+                    </Button>
+                    <Button
+                      type='button'
+                      variant='ghost'
+                      size='xs'
+                      onClick={() => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: '/logos/bank.svg' })}
+                      className='text-[10px] px-1.5 py-0.5 h-6'
+                    >
+                      Banco
+                    </Button>
+                  </div>
+                </div>
+
+                <div className='flex items-center gap-3'>
+                  <div className='w-12 h-12 rounded-xl bg-slate-950 p-2 flex items-center justify-center shrink-0 border border-slate-800 shadow-inner'>
+                    <img
+                      src={selectedMethodForEdit.logo_url}
+                      alt='Logo'
+                      className='max-h-full max-w-full object-contain'
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/logos/bank.svg';
+                      }}
+                    />
+                  </div>
+                  <div className='space-y-1.5 flex-1'>
+                    <Input
+                      type='file'
+                      accept='image/*'
+                      onChange={(e) => handleMethodLogoUpload(e, false)}
+                      disabled={isUploadingMethodLogo}
+                      className='text-xs file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[11px] file:bg-primary file:text-primary-foreground cursor-pointer'
+                    />
+                    <Input
+                      value={selectedMethodForEdit.logo_url}
+                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: e.target.value })}
+                      placeholder='O pega la URL del logo...'
+                      className='text-xs font-mono text-muted-foreground'
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Fields based on Type */}
+              {selectedMethodForEdit.type === 'zelle' && (
+                <div className='space-y-3'>
+                  <div className='space-y-2'>
+                    <Label>Correo Electrónico para Zelle</Label>
+                    <Input
+                      type='email'
+                      required
+                      value={selectedMethodForEdit.account_email || ''}
+                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_email: e.target.value })}
+                      placeholder='pagos@tuempresa.com'
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label>Nombre del Titular Registrado</Label>
+                    <Input
+                      required
+                      value={selectedMethodForEdit.account_holder || ''}
+                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_holder: e.target.value })}
+                      placeholder='Nombre o Razón Social'
+                    />
+                  </div>
+                </div>
+              )}
+
+              {selectedMethodForEdit.type === 'binance' && (
+                <div className='space-y-3'>
+                  <div className='space-y-2'>
+                    <Label>Binance Pay ID / UID</Label>
+                    <Input
+                      value={selectedMethodForEdit.binance_id || ''}
+                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, binance_id: e.target.value })}
+                      placeholder='Ej: 84920193'
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label>Red Cripto (Ej: USDT TRC-20, BEP-20)</Label>
+                    <Input
+                      value={selectedMethodForEdit.network || ''}
+                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, network: e.target.value })}
+                      placeholder='USDT (Red TRC-20)'
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label>Dirección de Billetera (Wallet)</Label>
+                    <Input
+                      value={selectedMethodForEdit.wallet_address || ''}
+                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, wallet_address: e.target.value })}
+                      placeholder='TXyz1234567890...'
+                      className='font-mono text-xs'
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(selectedMethodForEdit.type === 'bank_transfer' || selectedMethodForEdit.type === 'custom') && (
+                <div className='space-y-3'>
+                  <div className='grid grid-cols-2 gap-3'>
+                    <div className='space-y-2'>
+                      <Label>Banco / Plataforma</Label>
+                      <Input
+                        value={selectedMethodForEdit.bank_name || ''}
+                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, bank_name: e.target.value })}
+                        placeholder='Ej: Chase / Mercantil / PayPal'
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label>Titular de la Cuenta</Label>
+                      <Input
+                        value={selectedMethodForEdit.account_holder || ''}
+                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_holder: e.target.value })}
+                        placeholder='Nombre o Empresa'
+                      />
+                    </div>
+                  </div>
+                  <div className='grid grid-cols-2 gap-3'>
+                    <div className='space-y-2'>
+                      <Label>Número de Cuenta / Teléfono</Label>
+                      <Input
+                        value={selectedMethodForEdit.account_number || ''}
+                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_number: e.target.value })}
+                        placeholder='0134-0000-...'
+                      />
+                    </div>
+                    <div className='space-y-2'>
+                      <Label>Documento / RIF / Routing</Label>
+                      <Input
+                        value={selectedMethodForEdit.routing_number || ''}
+                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, routing_number: e.target.value })}
+                        placeholder='J-12345678-0 o ABA Routing'
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className='space-y-2'>
+                <Label>Instrucciones de Pago / Nota para el Cliente</Label>
+                <Textarea
+                  rows={2}
+                  value={selectedMethodForEdit.instructions || ''}
+                  onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, instructions: e.target.value })}
+                  placeholder='Ej: Indicar número de factura y enviar captura de pago a facturacion@empresa.com'
+                />
+              </div>
+
+              <DialogFooter className='pt-2'>
+                <Button type='button' variant='outline' onClick={() => setEditMethodModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type='submit' className='bg-primary font-bold'>
+                  Guardar Cambios
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ======================================================== */}
+      {/* MODAL: CREAR MÉTODO PERSONALIZADO */}
+      {/* ======================================================== */}
+      <Dialog open={createMethodModalOpen} onOpenChange={setCreateMethodModalOpen}>
+        <DialogContent className='sm:max-w-lg max-h-[90vh] overflow-y-auto'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2'>
+              <Icons.add className='h-5 w-5 text-primary' />
+              <span>Nuevo Método de Pago Personalizado</span>
+            </DialogTitle>
+            <DialogDescription>
+              Agrega una cuenta adicional (ej: Pago Móvil, PayPal, Bizum, o billetera cripto)
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateMethodSubmit} className='space-y-4 py-2'>
+            <div className='grid grid-cols-2 gap-3'>
+              <div className='space-y-2'>
+                <Label>Nombre del Método</Label>
+                <Input
+                  required
+                  placeholder='Ej: Pago Móvil BDV / PayPal'
+                  value={newMethodName}
+                  onChange={(e) => setNewMethodName(e.target.value)}
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label>Tipo de Canal</Label>
+                <Select
+                  value={newMethodType}
+                  onValueChange={(val: any) => setNewMethodType(val)}
+                >
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='custom'>Personalizado / Billetera</SelectItem>
+                    <SelectItem value='bank_transfer'>Banca / Transferencia</SelectItem>
+                    <SelectItem value='binance'>Cripto / Binance</SelectItem>
+                    <SelectItem value='zelle'>Zelle</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Logo selection / upload */}
+            <div className='p-3 rounded-xl border border-border/60 bg-muted/20 space-y-3'>
+              <div className='flex items-center justify-between'>
+                <Label className='text-xs font-semibold'>Logo / Ícono del Canal</Label>
+                <div className='flex items-center gap-1.5'>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='xs'
+                    onClick={() => setNewMethodLogo('/logos/zelle.svg')}
+                    className='text-[10px] px-1.5 py-0.5 h-6'
+                  >
+                    Zelle
+                  </Button>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='xs'
+                    onClick={() => setNewMethodLogo('/logos/binance.svg')}
+                    className='text-[10px] px-1.5 py-0.5 h-6'
+                  >
+                    Binance
+                  </Button>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='xs'
+                    onClick={() => setNewMethodLogo('/logos/bank.svg')}
+                    className='text-[10px] px-1.5 py-0.5 h-6'
+                  >
+                    Banco
+                  </Button>
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='xs'
+                    onClick={() => setNewMethodLogo('/logos/crypto.svg')}
+                    className='text-[10px] px-1.5 py-0.5 h-6'
+                  >
+                    Cripto
+                  </Button>
+                </div>
+              </div>
+
+              <div className='flex items-center gap-3'>
+                <div className='w-12 h-12 rounded-xl bg-slate-950 p-2 flex items-center justify-center shrink-0 border border-slate-800 shadow-inner'>
+                  <img
+                    src={newMethodLogo}
+                    alt='Logo'
+                    className='max-h-full max-w-full object-contain'
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/logos/bank.svg';
+                    }}
+                  />
+                </div>
+                <div className='space-y-1.5 flex-1'>
+                  <Input
+                    type='file'
+                    accept='image/*'
+                    onChange={(e) => handleMethodLogoUpload(e, true)}
+                    disabled={isUploadingMethodLogo}
+                    className='text-xs file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[11px] file:bg-primary file:text-primary-foreground cursor-pointer'
+                  />
+                  <Input
+                    value={newMethodLogo}
+                    onChange={(e) => setNewMethodLogo(e.target.value)}
+                    placeholder='O URL directa de Supabase / imagen...'
+                    className='text-xs font-mono text-muted-foreground'
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Inputs based on type */}
+            <div className='grid grid-cols-2 gap-3'>
+              <div className='space-y-2'>
+                <Label>Banco / Red / Plataforma</Label>
+                <Input
+                  value={newMethodBank}
+                  onChange={(e) => setNewMethodBank(e.target.value)}
+                  placeholder='Ej: Banco de Venezuela / TRC20'
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label>Titular de la Cuenta</Label>
+                <Input
+                  value={newMethodHolder}
+                  onChange={(e) => setNewMethodHolder(e.target.value)}
+                  placeholder='Nombre completo o Razón Social'
+                />
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 gap-3'>
+              <div className='space-y-2'>
+                <Label>Nº Cuenta / Teléfono / Correo</Label>
+                <Input
+                  value={newMethodAccount}
+                  onChange={(e) => setNewMethodAccount(e.target.value)}
+                  placeholder='0102-0000-... o 0414-...'
+                />
+              </div>
+              <div className='space-y-2'>
+                <Label>Cédula / RIF / Doc</Label>
+                <Input
+                  value={newMethodRouting}
+                  onChange={(e) => setNewMethodRouting(e.target.value)}
+                  placeholder='V-12345678 o J-12345678-0'
+                />
+              </div>
+            </div>
+
+            <div className='space-y-2'>
+              <Label>Instrucciones de Pago para el Cliente</Label>
+              <Textarea
+                rows={2}
+                value={newMethodInstructions}
+                onChange={(e) => setNewMethodInstructions(e.target.value)}
+                placeholder='Ej: Enviar comprobante con número de referencia bancaria al asesor.'
+              />
+            </div>
+
+            <DialogFooter className='pt-2'>
+              <Button type='button' variant='outline' onClick={() => setCreateMethodModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type='submit' className='bg-primary font-bold'>
+                Crear Método de Pago
               </Button>
             </DialogFooter>
           </form>

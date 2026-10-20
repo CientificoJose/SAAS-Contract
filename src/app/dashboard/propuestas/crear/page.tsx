@@ -7,14 +7,16 @@ import {
   createProposal,
   getCatalog,
   uploadAsset,
-  getSettings
+  getSettings,
+  getPaymentMethods
 } from '@/lib/actions';
 import type {
   CatalogCategory,
   Credential,
   ProposalService,
   ProposalCollaborator,
-  ProposalPayment
+  ProposalPayment,
+  PaymentMethodConfig
 } from '@/lib/supabase/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,7 +59,8 @@ export default function CrearPropuestaPage() {
   const [invoiceNumber, setInvoiceNumber] = useState(`FAC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
   const [paymentStatus, setPaymentStatus] = useState('PENDIENTE');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [paymentMethod, setPaymentMethod] = useState('Transferencia');
+  const [paymentMethod, setPaymentMethod] = useState('Transferencia Bancaria');
+  const [paymentMethodsList, setPaymentMethodsList] = useState<PaymentMethodConfig[]>([]);
 
   // Branding Custom
   const [brandColorPrimary, setBrandColorPrimary] = useState('');
@@ -171,6 +174,16 @@ export default function CrearPropuestaPage() {
       }
     }).catch((err) => {
       console.warn('Could not load tenant settings for proposal creation', err);
+    });
+
+    getPaymentMethods().then((methods) => {
+      setPaymentMethodsList(methods);
+      const firstEnabled = methods.find((m) => m.enabled);
+      if (firstEnabled) {
+        setPaymentMethod(firstEnabled.name);
+      }
+    }).catch((err) => {
+      console.warn('Could not load payment methods for proposal creation', err);
     });
   }, []);
 
@@ -451,17 +464,44 @@ export default function CrearPropuestaPage() {
               </div>
 
               <div className='space-y-2'>
-                <Label htmlFor='paymentMethod'>Método de Pago Sugerido</Label>
-                <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val || 'Transferencia')}>
+                <div className='flex items-center justify-between'>
+                  <Label htmlFor='paymentMethod'>Método de Pago Sugerido</Label>
+                  <Link
+                    href='/dashboard'
+                    className='text-[10px] text-primary hover:underline'
+                    target='_blank'
+                  >
+                    Gestionar métodos
+                  </Link>
+                </div>
+                <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val || 'Transferencia Bancaria')}>
                   <SelectTrigger id='paymentMethod'>
-                    <SelectValue />
+                    <SelectValue placeholder='Selecciona método' />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='Transferencia'>Transferencia Bancaria</SelectItem>
-                    <SelectItem value='Binance'>Binance Pay (USDT)</SelectItem>
-                    <SelectItem value='Zelle'>Zelle</SelectItem>
-                    <SelectItem value='Tarjeta'>Tarjeta de Crédito / Débito</SelectItem>
-                    <SelectItem value='Efectivo'>Efectivo / Divisas</SelectItem>
+                    {paymentMethodsList
+                      .filter((m) => m.enabled)
+                      .map((m) => (
+                        <SelectItem key={m.id} value={m.name}>
+                          <div className='flex items-center gap-2'>
+                            {m.logo_url && (
+                              <img
+                                src={m.logo_url}
+                                alt={m.name}
+                                className='w-4 h-4 object-contain rounded-sm'
+                              />
+                            )}
+                            <span>{m.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    {paymentMethodsList.filter((m) => m.enabled).length === 0 && (
+                      <>
+                        <SelectItem value='Transferencia Bancaria'>Transferencia Bancaria</SelectItem>
+                        <SelectItem value='Binance Pay (USDT)'>Binance Pay (USDT)</SelectItem>
+                        <SelectItem value='Zelle'>Zelle</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

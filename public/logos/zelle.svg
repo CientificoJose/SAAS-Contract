@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" fill="none">
+  <rect width="120" height="120" rx="28" fill="#7414CA"/>
+  <!-- Zelle stylized Z with vertical center bar -->
+  <g fill="#FFFFFF">
+    <path d="M32 36h46c4.4 0 8 3.6 8 8v2c0 2.2-0.9 4.3-2.5 5.8L47 84h39c2.2 0 4 1.8 4 4v2c0 2.2-1.8 4-4 4H40c-4.4 0-8-3.6-8-8v-2c0-2.2 0.9-4.3 2.5-5.8L71 44H32c-2.2 0-4-1.8-4-4v-4c0-2.2 1.8-4 4-4z"/>
+    <!-- Vertical center slash bar -->
+    <rect x="55" y="24" width="10" height="72" rx="5" fill="#FFFFFF"/>
+  </g>
+</svg>

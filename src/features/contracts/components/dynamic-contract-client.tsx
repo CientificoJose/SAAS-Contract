@@ -9,11 +9,13 @@ import type {
   Credential,
   ProposalService,
   ProposalPayment,
-  ProposalCollaborator
+  ProposalCollaborator,
+  PaymentMethodConfig
 } from '@/lib/supabase/types';
 import { SignatureBlock } from '@/components/proposals/signature-pad';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Icons } from '@/components/icons';
+import { toast } from 'sonner';
 
 interface DynamicContractClientProps {
   proposal: Proposal;
@@ -28,6 +30,7 @@ interface DynamicContractClientProps {
     brand_color_primary?: string;
     brand_color_secondary?: string;
   } | null;
+  paymentMethods?: PaymentMethodConfig[];
 }
 
 type SignatureData = {
@@ -42,9 +45,21 @@ export function DynamicContractClient({
   payments,
   collaborators,
   globalSettings = {},
-  creatorProfile
+  creatorProfile,
+  paymentMethods = []
 }: DynamicContractClientProps) {
   const [activeTab, setActiveTab] = useState('servicios');
+
+  const activePaymentMethods = (paymentMethods || []).filter((pm) => pm.enabled);
+
+  const copyToClipboard = (text: string, label: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      toast.success(`${label} copiado al portapapeles`);
+    } else {
+      toast.info(text);
+    }
+  };
 
   // Dynamic branding colors & identity
   const brandName = creatorProfile?.tenant_name || globalSettings.brand_name || 'ContractCloud';
@@ -657,6 +672,156 @@ export function DynamicContractClient({
                   </div>
                 </div>
               </section>
+
+              {/* CANALES Y MÉTODOS DE PAGO HABILITADOS */}
+              {activePaymentMethods.length > 0 && (
+                <section className='space-y-4'>
+                  <div className='flex items-center justify-between'>
+                    <h2 className='text-xl font-bold text-slate-900 flex items-center gap-2'>
+                      <Icons.creditCard className='h-5 w-5 text-orange-600' />
+                      <span>Canales y Métodos de Pago Habilitados</span>
+                    </h2>
+                    <span className='text-xs text-slate-500 hidden sm:inline'>
+                      Realiza tu pago y envía el comprobante a tu asesor
+                    </span>
+                  </div>
+
+                  <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
+                    {activePaymentMethods.map((pm) => (
+                      <div
+                        key={pm.id}
+                        className='bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-slate-300 transition-all flex flex-col justify-between space-y-3'
+                      >
+                        <div className='space-y-3'>
+                          <div className='flex items-center gap-3'>
+                            <div className='w-10 h-10 rounded-xl bg-slate-950 p-1.5 flex items-center justify-center shrink-0 border border-slate-800 shadow-inner'>
+                              <img
+                                src={pm.logo_url}
+                                alt={pm.name}
+                                className='max-h-full max-w-full object-contain'
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = '/logos/bank.svg';
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <h4 className='font-bold text-sm text-slate-900'>{pm.name}</h4>
+                              <span className='text-[10px] font-semibold uppercase tracking-wider text-slate-400'>
+                                {pm.type === 'zelle' ? 'Transferencia USA' : pm.type === 'binance' ? 'Cripto / Web3' : pm.type === 'bank_transfer' ? 'Banca Tradicional' : 'Pago Digital'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className='space-y-1.5 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100'>
+                            {pm.account_email && (
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-slate-500'>Correo:</span>
+                                <div className='flex items-center gap-1.5 font-mono font-medium text-slate-800'>
+                                  <span className='truncate max-w-[140px]'>{pm.account_email}</span>
+                                  <button
+                                    type='button'
+                                    onClick={() => copyToClipboard(pm.account_email!, 'Correo')}
+                                    className='p-1 hover:bg-slate-200 rounded transition cursor-pointer text-slate-500 hover:text-slate-800'
+                                    title='Copiar correo'
+                                  >
+                                    <Icons.copy className='h-3 w-3' />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {pm.account_holder && (
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-slate-500'>Titular:</span>
+                                <span className='font-medium text-slate-800 text-right truncate max-w-[150px]'>{pm.account_holder}</span>
+                              </div>
+                            )}
+
+                            {pm.binance_id && (
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-slate-500'>Pay ID:</span>
+                                <div className='flex items-center gap-1.5 font-mono font-bold text-amber-600'>
+                                  <span>{pm.binance_id}</span>
+                                  <button
+                                    type='button'
+                                    onClick={() => copyToClipboard(pm.binance_id!, 'Binance Pay ID')}
+                                    className='p-1 hover:bg-slate-200 rounded transition cursor-pointer text-slate-500 hover:text-slate-800'
+                                    title='Copiar ID'
+                                  >
+                                    <Icons.copy className='h-3 w-3' />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {pm.network && (
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-slate-500'>Red:</span>
+                                <span className='font-semibold text-slate-700'>{pm.network}</span>
+                              </div>
+                            )}
+
+                            {pm.wallet_address && (
+                              <div className='space-y-1 pt-1 border-t border-slate-200/60'>
+                                <div className='flex items-center justify-between'>
+                                  <span className='text-slate-500 text-[11px]'>Billetera:</span>
+                                  <button
+                                    type='button'
+                                    onClick={() => copyToClipboard(pm.wallet_address!, 'Dirección USDT')}
+                                    className='text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer'
+                                  >
+                                    <Icons.copy className='h-3 w-3' /> Copiar
+                                  </button>
+                                </div>
+                                <p className='font-mono text-[10px] text-slate-600 break-all bg-white p-1.5 rounded border border-slate-200'>
+                                  {pm.wallet_address}
+                                </p>
+                              </div>
+                            )}
+
+                            {pm.bank_name && (
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-slate-500'>Banco:</span>
+                                <span className='font-medium text-slate-800'>{pm.bank_name}</span>
+                              </div>
+                            )}
+
+                            {pm.account_number && (
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-slate-500'>Nº Cuenta:</span>
+                                <div className='flex items-center gap-1.5 font-mono font-medium text-slate-800'>
+                                  <span className='truncate max-w-[130px]'>{pm.account_number}</span>
+                                  <button
+                                    type='button'
+                                    onClick={() => copyToClipboard(pm.account_number!, 'Número de cuenta')}
+                                    className='p-1 hover:bg-slate-200 rounded transition cursor-pointer text-slate-500 hover:text-slate-800'
+                                    title='Copiar cuenta'
+                                  >
+                                    <Icons.copy className='h-3 w-3' />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {pm.routing_number && (
+                              <div className='flex items-center justify-between gap-2'>
+                                <span className='text-slate-500'>Doc / RIF:</span>
+                                <span className='font-mono text-slate-700'>{pm.routing_number}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {pm.instructions && (
+                            <p className='text-[11px] text-slate-500 italic leading-snug'>
+                              {pm.instructions}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* FIRMA BLOCK */}
               <SignatureBlock

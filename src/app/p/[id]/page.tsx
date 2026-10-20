@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PublicProposalPage({ params }: Props) {
   const { id } = await params;
-  const [{ proposal, credentials, services, payments, collaborators, creatorProfile }, settings] = await Promise.all([
+  const [{ proposal, credentials, services, payments, collaborators, creatorProfile, paymentMethods }, settings] = await Promise.all([
     getProposalById(id),
     getSettings()
   ]);
@@ -49,6 +49,7 @@ export default async function PublicProposalPage({ params }: Props) {
       collaborators={collaborators}
       globalSettings={settings}
       creatorProfile={creatorProfile}
+      paymentMethods={paymentMethods}
     />
   );
 }

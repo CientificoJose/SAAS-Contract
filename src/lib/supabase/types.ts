@@ -49,6 +49,26 @@ export interface TenantProfile {
   created_at?: string;
 }
 
+export interface PaymentMethodConfig {
+  id: string;
+  name: string;
+  type: 'zelle' | 'binance' | 'bank_transfer' | 'custom';
+  logo_url: string;
+  enabled: boolean;
+  account_holder?: string;
+  account_email?: string;
+  phone_number?: string;
+  binance_id?: string;
+  wallet_address?: string;
+  network?: string;
+  bank_name?: string;
+  account_number?: string;
+  account_type?: string;
+  routing_number?: string;
+  instructions?: string;
+  qr_code_url?: string;
+}
+
 export interface ProposalService {
   id?: string;
   proposal_id?: string;
