@@ -73,8 +73,27 @@ export default function CrearPropuestaPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const { url } = await uploadAsset(formData);
-      setBrandLogoUrl(url);
+
+      let finalUrl = '';
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const data = await res.json();
+          finalUrl = data.url;
+        }
+      } catch (fetchErr) {
+        console.warn('API upload fallback to Server Action:', fetchErr);
+      }
+
+      if (!finalUrl) {
+        const { url } = await uploadAsset(formData);
+        finalUrl = url;
+      }
+
+      setBrandLogoUrl(finalUrl);
       toast.success('Logo subido a Supabase Storage con éxito');
     } catch (err: any) {
       toast.error(err.message || 'Error al subir archivo a Supabase Storage');
