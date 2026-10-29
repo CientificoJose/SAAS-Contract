@@ -5,6 +5,14 @@ import { createClient } from './supabase/server';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import nodemailer from 'nodemailer';
+
+function safeRevalidatePath(path: string) {
+  try {
+    revalidatePath(path);
+  } catch {
+    // Ignore outside request context
+  }
+}
 import type {
   Proposal,
   ProposalService,
@@ -526,8 +534,8 @@ export async function registerPayment(data: {
       .update(proposalUpdate)
       .eq('id', data.proposal_id);
 
-    revalidatePath('/dashboard');
-    revalidatePath(`/p/${data.proposal_id}`);
+    safeRevalidatePath('/dashboard');
+    safeRevalidatePath(`/p/${data.proposal_id}`);
     return { success: true, payment_id: paymentId, totalPaid, newStatus };
   } catch (err: any) {
     console.error('Error registering payment:', err);
@@ -591,8 +599,8 @@ export async function generateRenewalPeriod(data: {
       })
       .eq('id', data.proposal_id);
 
-    revalidatePath('/dashboard');
-    revalidatePath(`/p/${data.proposal_id}`);
+    safeRevalidatePath('/dashboard');
+    safeRevalidatePath(`/p/${data.proposal_id}`);
 
     if (data.notify_client && (data.client_email || proposal.client_email)) {
       const email = data.client_email || proposal.client_email;
