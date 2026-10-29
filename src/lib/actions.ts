@@ -935,7 +935,7 @@ export async function savePaymentMethods(methods: PaymentMethodConfig[]) {
 // EMAIL SENDING
 // ==========================================
 
-export async function sendTestEmail(recipientEmail: string) {
+export async function sendTestEmail(recipientEmail: string): Promise<{ success: boolean; error?: string }> {
   try {
     const settings = await getSettings();
     const host = settings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
@@ -946,7 +946,7 @@ export async function sendTestEmail(recipientEmail: string) {
     const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractCloud'}" <${user}>`;
 
     if (!host || !user) {
-      throw new Error('Servidor SMTP no configurado');
+      return { success: false, error: 'Servidor SMTP no configurado. Completa el host y usuario en Ajustes.' };
     }
 
     const transporter = nodemailer.createTransport({
@@ -979,18 +979,28 @@ export async function sendTestEmail(recipientEmail: string) {
     return { success: true };
   } catch (err: any) {
     console.error('Error sending test email:', err);
-    throw new Error(err.message || 'Error al enviar correo de prueba');
+    let errMsg = err.message || 'Error al enviar correo de prueba';
+    if (errMsg.includes('535') || errMsg.includes('Authentication failed')) {
+      errMsg = `Fallo de autenticación SMTP (535): Usuario o contraseña incorrectos en el servidor de correo Poste.io (${err.message})`;
+    } else if (errMsg.includes('ECONNREFUSED')) {
+      errMsg = `No se pudo conectar al servidor SMTP: Conexión rechazada (${err.message})`;
+    } else if (errMsg.includes('ETIMEDOUT')) {
+      errMsg = `Tiempo de espera agotado al conectar con el servidor SMTP (${err.message})`;
+    }
+    return { success: false, error: errMsg };
   }
 }
 
-export async function sendProposalEmail(proposalId: string, recipientEmail: string) {
+export async function sendProposalEmail(proposalId: string, recipientEmail: string): Promise<{ success: boolean; error?: string }> {
   try {
     const [{ proposal, creatorProfile }, globalSettings] = await Promise.all([
       getProposalById(proposalId),
       getSettings()
     ]);
 
-    if (!proposal) throw new Error('Propuesta no encontrada');
+    if (!proposal) {
+      return { success: false, error: 'Propuesta no encontrada' };
+    }
 
     // Tenant-aware SMTP credentials & branding
     const host = creatorProfile?.smtp_host || globalSettings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
@@ -1003,7 +1013,7 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
     const from = creatorProfile?.smtp_from || globalSettings.smtp_from || process.env.SMTP_FROM || `"${brandName}" <${user}>`;
 
     if (!host || !user) {
-      throw new Error('Servidor SMTP no configurado');
+      return { success: false, error: 'Servidor SMTP no configurado. Completa las credenciales en Ajustes.' };
     }
 
     const transporter = nodemailer.createTransport({
@@ -1046,6 +1056,10 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
     return { success: true };
   } catch (err: any) {
     console.error('Error sending proposal email:', err);
-    throw new Error(err.message || 'Error al enviar la propuesta por correo');
+    let errMsg = err.message || 'Error al enviar la propuesta por correo';
+    if (errMsg.includes('535') || errMsg.includes('Authentication failed')) {
+      errMsg = `Fallo de autenticación SMTP (535): Usuario o contraseña incorrectos en el servidor de correo (${err.message})`;
+    }
+    return { success: false, error: errMsg };
   }
 }

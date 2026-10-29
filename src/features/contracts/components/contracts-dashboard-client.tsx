@@ -280,9 +280,13 @@ export function ContractsDashboardClient({
 
     setIsSendingProposal(true);
     try {
-      await sendProposalEmail(selectedProposalForEmail.id, proposalRecipientEmail);
-      toast.success('Propuesta enviada por correo al cliente');
-      setEmailModalOpen(false);
+      const res = await sendProposalEmail(selectedProposalForEmail.id, proposalRecipientEmail);
+      if (!res.success) {
+        toast.error(res.error || 'Error al enviar por correo');
+      } else {
+        toast.success('Propuesta enviada por correo al cliente');
+        setEmailModalOpen(false);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Error al enviar por correo');
     } finally {
@@ -500,8 +504,12 @@ export function ContractsDashboardClient({
     }
     setIsSendingTest(true);
     try {
-      await sendTestEmail(testEmailRecipient);
-      toast.success('Correo de prueba enviado con éxito');
+      const res = await sendTestEmail(testEmailRecipient);
+      if (!res.success) {
+        toast.error(res.error || 'Error al enviar correo de prueba');
+      } else {
+        toast.success('Correo de prueba enviado con éxito');
+      }
     } catch (err: any) {
       toast.error(err.message || 'Error al enviar correo de prueba');
     } finally {
