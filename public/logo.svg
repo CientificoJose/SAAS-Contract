@@ -11,7 +11,7 @@
     </linearGradient>
     <linearGradient id="textWhite" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#FFFFFF" />
-      <stop offset="100%" stop-color="#F1F5F9" />
+      <stop offset="100%" stop-color="#F8FAFC" />
     </linearGradient>
     <linearGradient id="cloudTextGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#00F0FF" />
@@ -23,14 +23,14 @@
     </filter>
   </defs>
 
-  <!-- Logo Mark Container (40x40) -->
-  <rect x="4" y="4" width="40" height="40" rx="10" fill="#0A0F1D" stroke="url(#cloudGradFull)" stroke-width="1.6" />
-  
+  <!-- Complete Badge Container ensuring 100% contrast on any dark or light background -->
+  <rect x="1" y="1" width="228" height="46" rx="10" fill="#0A0F1D" stroke="url(#cloudGradFull)" stroke-width="1.2" />
+
   <!-- Subtle inner radial glow -->
-  <circle cx="24" cy="24" r="13" fill="#0066FF" fill-opacity="0.18" filter="url(#logoGlow)" />
+  <circle cx="25" cy="24" r="14" fill="#0066FF" fill-opacity="0.22" filter="url(#logoGlow)" />
 
   <!-- Cloud Outline Shape inside Badge -->
-  <path d="M 15 31 C 12 31, 10 28.5, 10 25.5 C 10 22.8, 12 20.3, 14.8 20 C 16 16, 19.8 13, 24 13 C 29 13, 33 16.5, 33.8 21.2 C 36.4 21.6, 38 23.8, 38 26.5 C 38 29.5, 35.8 31, 33 31 Z" 
+  <path d="M 16 31 C 13 31, 11 28.5, 11 25.5 C 11 22.8, 13 20.3, 15.8 20 C 17 16, 20.8 13, 25 13 C 30 13, 34 16.5, 34.8 21.2 C 37.4 21.6, 39 23.8, 39 26.5 C 39 29.5, 36.8 31, 34 31 Z" 
         fill="url(#cloudInnerFull)" 
         stroke="url(#cloudGradFull)" 
         stroke-width="1.5" 
@@ -39,21 +39,21 @@
   <!-- Document Sheet with Signature inside Cloud -->
   <g>
     <!-- Document Card -->
-    <rect x="19" y="16.5" width="10.5" height="13.5" rx="1.5" fill="#090E1A" stroke="#00F0FF" stroke-width="1" />
+    <rect x="20" y="16.5" width="10.5" height="13.5" rx="1.5" fill="#090E1A" stroke="#00F0FF" stroke-width="1" />
     <!-- Document fold -->
-    <path d="M 26.5 16.5 L 29.5 19.5 L 26.5 19.5 Z" fill="#0066FF" stroke="#00F0FF" stroke-width="0.7" />
+    <path d="M 27.5 16.5 L 30.5 19.5 L 27.5 19.5 Z" fill="#0066FF" stroke="#00F0FF" stroke-width="0.7" />
     <!-- Lines -->
-    <line x1="21" y1="21" x2="25" y2="21" stroke="#38BDF8" stroke-width="1" stroke-linecap="round" />
-    <line x1="21" y1="23.5" x2="27" y2="23.5" stroke="#38BDF8" stroke-width="1" stroke-linecap="round" stroke-opacity="0.7" />
+    <line x1="22" y1="21" x2="26" y2="21" stroke="#38BDF8" stroke-width="1" stroke-linecap="round" />
+    <line x1="22" y1="23.5" x2="28" y2="23.5" stroke="#38BDF8" stroke-width="1" stroke-linecap="round" stroke-opacity="0.7" />
     <!-- Electric Checkmark / Signature -->
-    <path d="M 21 26.8 L 23 28.2 L 27.5 25.2" stroke="#00F0FF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#logoGlow)" />
+    <path d="M 22 26.8 L 24 28.2 L 28.5 25.2" stroke="#00F0FF" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" filter="url(#logoGlow)" />
   </g>
 
   <!-- Typography: ContractCloud -->
-  <text x="53" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="800" fill="url(#textWhite)" letter-spacing="-0.02em">
+  <text x="50" y="27" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="800" fill="url(#textWhite)" letter-spacing="-0.02em">
     Contract<tspan fill="url(#cloudTextGrad)">Cloud</tspan>
   </text>
-  <text x="54" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="8.5" font-weight="600" fill="#64748B" letter-spacing="0.12em">
+  <text x="51" y="38" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="8.5" font-weight="600" fill="#94A3B8" letter-spacing="0.12em">
     SMART CLOUD CONTRACTS
   </text>
 </svg>
