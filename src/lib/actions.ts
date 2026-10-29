@@ -203,13 +203,13 @@ export async function getProposals(): Promise<(Proposal & { services?: ProposalS
       return [];
     }
 
-    const { data: services, error: sError } = await supabaseAdmin
-      .from('proposal_services')
-      .select('*');
+    const [servicesRes, paymentsRes] = await Promise.all([
+      supabaseAdmin.from('proposal_services').select('*'),
+      supabaseAdmin.from('proposal_payments').select('*').order('payment_date', { ascending: false })
+    ]);
 
-    if (sError || !services) {
-      return proposals as (Proposal & { services?: ProposalService[] })[];
-    }
+    const services = servicesRes.data || [];
+    const payments = paymentsRes.data || [];
 
     return proposals.map((p) => ({
       ...p,
@@ -217,8 +217,9 @@ export async function getProposals(): Promise<(Proposal & { services?: ProposalS
       brand_logo_url: p.brand_logo_url && p.brand_logo_url !== '/recurso.png'
         ? p.brand_logo_url
         : 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
-      services: services.filter((s) => s.proposal_id === p.id)
-    })) as (Proposal & { services?: ProposalService[] })[];
+      services: services.filter((s) => s.proposal_id === p.id),
+      payments: payments.filter((pm) => pm.proposal_id === p.id)
+    })) as (Proposal & { services?: ProposalService[]; payments?: ProposalPayment[] })[];
   } catch (err) {
     console.error('Unexpected error in getProposals:', err);
     return [];
@@ -448,61 +449,165 @@ export async function registerPayment(data: {
   payment_date: string;
   notes?: string;
   description?: string;
+  payment_id?: string;
+  new_expiration_date?: string;
 }) {
   try {
-    const paymentId = `pay-${Date.now()}`;
-    const { error: payErr } = await supabaseAdmin.from('proposal_payments').insert({
-      id: paymentId,
-      proposal_id: data.proposal_id,
-      amount: data.amount,
-      payment_method: data.payment_method,
-      payment_date: data.payment_date,
-      description: data.description || 'Abono de cuota',
-      status: 'PAGADO',
-      notes: data.notes || ''
-    });
+    let paymentId = data.payment_id;
 
-    if (payErr) throw payErr;
+    if (paymentId) {
+      // Update existing pending cuota
+      const { error: payErr } = await supabaseAdmin
+        .from('proposal_payments')
+        .update({
+          amount: data.amount,
+          payment_method: data.payment_method,
+          payment_date: data.payment_date,
+          status: 'PAGADO',
+          notes: data.notes || '',
+          ...(data.description ? { description: data.description } : {})
+        })
+        .eq('id', paymentId);
 
-    // Recalculate total paid vs proposal price
-    const { data: proposal } = await supabaseAdmin
-      .from('proposals')
-      .select('price, payment_status')
-      .eq('id', data.proposal_id)
-      .single();
+      if (payErr) throw payErr;
+    } else {
+      // Create new payment record
+      paymentId = `pay-${Date.now()}`;
+      const { error: payErr } = await supabaseAdmin.from('proposal_payments').insert({
+        id: paymentId,
+        proposal_id: data.proposal_id,
+        amount: data.amount,
+        payment_method: data.payment_method,
+        payment_date: data.payment_date,
+        description: data.description || 'Abono de cuota',
+        status: 'PAGADO',
+        notes: data.notes || ''
+      });
 
+      if (payErr) throw payErr;
+    }
+
+    // Check all payments for this proposal
     const { data: allPayments } = await supabaseAdmin
       .from('proposal_payments')
       .select('amount, status')
       .eq('proposal_id', data.proposal_id);
 
+    const hasPending = (allPayments || []).some((p) => p.status === 'PENDIENTE');
     const totalPaid = (allPayments || [])
       .filter((p) => p.status === 'PAGADO')
       .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
 
-    const price = Number(proposal?.price) || 0;
-    let newStatus = 'PENDIENTE';
-    if (totalPaid >= price && price > 0) {
-      newStatus = 'PAGADO';
-    } else if (totalPaid > 0) {
-      newStatus = 'PARCIAL';
+    const newStatus = hasPending ? 'PENDIENTE' : 'PAGADO';
+
+    const proposalUpdate: any = {
+      payment_status: newStatus,
+      payment_amount: totalPaid,
+      payment_date: data.payment_date,
+      payment_method: data.payment_method
+    };
+
+    // If a new expiration date is provided, extend contract validity and services!
+    if (data.new_expiration_date) {
+      proposalUpdate.service_expiration = data.new_expiration_date;
+
+      await supabaseAdmin
+        .from('proposal_services')
+        .update({
+          expiration_date: data.new_expiration_date,
+          status: 'ACTIVE'
+        })
+        .eq('proposal_id', data.proposal_id)
+        .eq('billing_type', 'RECURRENT');
     }
 
     await supabaseAdmin
       .from('proposals')
-      .update({
-        payment_status: newStatus,
-        payment_amount: totalPaid,
-        payment_date: data.payment_date,
-        payment_method: data.payment_method
-      })
+      .update(proposalUpdate)
       .eq('id', data.proposal_id);
 
     revalidatePath('/dashboard');
+    revalidatePath(`/p/${data.proposal_id}`);
     return { success: true, payment_id: paymentId, totalPaid, newStatus };
   } catch (err: any) {
     console.error('Error registering payment:', err);
     throw new Error(err.message || 'Error al registrar el pago');
+  }
+}
+
+export async function generateRenewalPeriod(data: {
+  proposal_id: string;
+  amount: number;
+  start_date: string;
+  end_date: string;
+  due_date?: string;
+  description?: string;
+  notify_client?: boolean;
+  client_email?: string;
+}): Promise<{ success: boolean; error?: string; payment_id?: string }> {
+  try {
+    const { data: proposal, error: pErr } = await supabaseAdmin
+      .from('proposals')
+      .select('*')
+      .eq('id', data.proposal_id)
+      .single();
+
+    if (pErr || !proposal) {
+      return { success: false, error: 'Propuesta no encontrada' };
+    }
+
+    const { count } = await supabaseAdmin
+      .from('proposal_payments')
+      .select('*', { count: 'exact', head: true })
+      .eq('proposal_id', data.proposal_id);
+
+    const receiptSuffix = (count || 0) + 1;
+    const paymentId = `pay-renov-${Date.now()}`;
+    const desc = data.description || `Renovación de Servicio: ${data.start_date} al ${data.end_date}`;
+
+    const { error: insErr } = await supabaseAdmin.from('proposal_payments').insert({
+      id: paymentId,
+      proposal_id: data.proposal_id,
+      invoice_number: `${proposal.invoice_number}-R${receiptSuffix}`,
+      amount: data.amount,
+      payment_date: null,
+      payment_method: '',
+      description: desc,
+      status: 'PENDIENTE',
+      due_date: data.due_date || data.start_date,
+      notes: `Periodo correspondiente del ${data.start_date} al ${data.end_date}`
+    });
+
+    if (insErr) {
+      console.error('Error inserting renewal payment:', insErr);
+      return { success: false, error: insErr.message };
+    }
+
+    // Set proposal payment_status to PENDIENTE so that the dashboard and portal show pending renewal
+    await supabaseAdmin
+      .from('proposals')
+      .update({
+        payment_status: 'PENDIENTE'
+      })
+      .eq('id', data.proposal_id);
+
+    revalidatePath('/dashboard');
+    revalidatePath(`/p/${data.proposal_id}`);
+
+    if (data.notify_client && (data.client_email || proposal.client_email)) {
+      const email = data.client_email || proposal.client_email;
+      await sendRenewalEmail({
+        proposalId: data.proposal_id,
+        recipientEmail: email,
+        periodDesc: `${data.start_date} al ${data.end_date}`,
+        amount: data.amount
+      });
+    }
+
+    return { success: true, payment_id: paymentId };
+  } catch (err: any) {
+    console.error('Error in generateRenewalPeriod:', err);
+    return { success: false, error: err.message || 'Error al generar periodo de renovación' };
   }
 }
 
@@ -1031,13 +1136,27 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
 
     const proposalUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://contract.press-cloud.com'}/p/${proposal.id}`;
 
-    await transporter.sendMail({
-      from,
-      to: recipientEmail,
-      subject: `Propuesta Comercial #${proposal.invoice_number} - ${proposal.client_company}`,
-      html: `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;padding:28px;background:#ffffff;">
-          <h2 style="color:${primaryColor};margin-top:0;">Propuesta de Servicios y Contrato Comercial</h2>
+    const isSigned = !!proposal.signature_image;
+    const subject = isSigned
+      ? `🔔 Acceso a Portal de Servicios y Pagos #${proposal.invoice_number} - ${proposal.client_company}`
+      : `Propuesta Comercial #${proposal.invoice_number} - ${proposal.client_company}`;
+
+    const heading = isSigned
+      ? 'Portal de Cliente y Servicios Activos'
+      : 'Propuesta de Servicios y Contrato Comercial';
+
+    const bodyContent = isSigned
+      ? `
+          <p>Hola <strong>${proposal.client_name}</strong> (${proposal.client_company}),</p>
+          <p>Te compartimos el enlace de acceso directo a tu portal de cliente con <strong>${brandName}</strong>.</p>
+          <p>Tu contrato marco se encuentra activo y formalizado. Desde este portal puedes consultar tus servicios contratados, credenciales seguras, vigencia activa e historial de pagos y renovaciones:</p>
+          <div style="text-align:center;margin:32px 0;">
+            <a href="${proposalUrl}" style="background-color:${primaryColor};color:#ffffff;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+              Acceder a mi Portal de Servicios
+            </a>
+          </div>
+        `
+      : `
           <p>Hola <strong>${proposal.client_name}</strong> (${proposal.client_company}),</p>
           <p>Se ha generado la propuesta comercial número <strong>#${proposal.invoice_number}</strong> para tus servicios contratados.</p>
           <p>Puedes revisar los alcances detallados, formas de pago y formalizar con firma digital desde nuestro portal interactivo:</p>
@@ -1046,6 +1165,16 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
               Ver Propuesta y Contrato Comercial
             </a>
           </div>
+        `;
+
+    await transporter.sendMail({
+      from,
+      to: recipientEmail,
+      subject,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;padding:28px;background:#ffffff;">
+          <h2 style="color:${primaryColor};margin-top:0;">${heading}</h2>
+          ${bodyContent}
           <p style="font-size:12px;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:16px;">
             Este enlace es único y seguro para ${proposal.client_company} emitido por <strong>${brandName}</strong>.
           </p>
@@ -1061,5 +1190,73 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
       errMsg = `Fallo de autenticación SMTP (535): Usuario o contraseña incorrectos en el servidor de correo (${err.message})`;
     }
     return { success: false, error: errMsg };
+  }
+}
+
+export async function sendRenewalEmail(data: {
+  proposalId: string;
+  recipientEmail: string;
+  periodDesc: string;
+  amount: number;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const [{ proposal, creatorProfile }, globalSettings] = await Promise.all([
+      getProposalById(data.proposalId),
+      getSettings()
+    ]);
+
+    if (!proposal) {
+      return { success: false, error: 'Propuesta no encontrada' };
+    }
+
+    const host = creatorProfile?.smtp_host || globalSettings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
+    const portStr = creatorProfile?.smtp_port || globalSettings.smtp_port || process.env.SMTP_PORT || '465';
+    const port = parseInt(portStr);
+    const user = creatorProfile?.smtp_user || globalSettings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
+    const pass = creatorProfile?.smtp_pass || globalSettings.smtp_pass || process.env.SMTP_PASS || '';
+    const brandName = creatorProfile?.tenant_name || globalSettings.brand_name || 'ContractCloud';
+    const primaryColor = proposal.brand_color_primary || creatorProfile?.brand_color_primary || globalSettings.color_primary || '#0066FF';
+    const from = creatorProfile?.smtp_from || globalSettings.smtp_from || process.env.SMTP_FROM || `"${brandName}" <${user}>`;
+
+    if (!host || !user) {
+      return { success: false, error: 'Servidor SMTP no configurado. Completa las credenciales en Ajustes.' };
+    }
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://contract.press-cloud.com'}/p/${proposal.id}`;
+
+    await transporter.sendMail({
+      from,
+      to: data.recipientEmail,
+      subject: `🔔 Aviso de Renovación de Servicios #${proposal.invoice_number} - ${proposal.client_company}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;padding:28px;background:#ffffff;">
+          <h2 style="color:${primaryColor};margin-top:0;">Aviso de Renovación de Servicios</h2>
+          <p>Hola <strong>${proposal.client_name}</strong> (${proposal.client_company}),</p>
+          <p>Te informamos que tu periodo de servicio correspondiente al lapso <strong>${data.periodDesc}</strong> se encuentra disponible para renovación por un monto de <strong>$${Number(data.amount).toFixed(2)} USD</strong>.</p>
+          <p>Tu contrato marco continúa activo y formalizado. Puedes acceder a tu portal de cliente para verificar los detalles y consultar las cuentas habilitadas para transferir (Zelle, Binance, Transferencia Bancaria):</p>
+          <div style="text-align:center;margin:32px 0;">
+            <a href="${portalUrl}" style="background-color:${primaryColor};color:#ffffff;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">
+              Ver Cuota y Canales de Pago
+            </a>
+          </div>
+          <p style="font-size:12px;color:#64748b;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:16px;">
+            Este enlace es único y seguro para ${proposal.client_company} emitido por <strong>${brandName}</strong>.
+          </p>
+        </div>
+      `
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error sending renewal email:', err);
+    return { success: false, error: err.message || 'Error al enviar aviso de renovación' };
   }
 }

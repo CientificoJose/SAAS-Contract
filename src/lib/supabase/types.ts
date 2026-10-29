@@ -30,6 +30,8 @@ export interface Proposal {
   late_fee_percentage?: number;
   daily_penalty_fee?: number;
   user_id?: string;
+  services?: ProposalService[];
+  payments?: ProposalPayment[];
 }
 
 export interface TenantProfile {

@@ -16,6 +16,7 @@ import {
   deleteServicePlan,
   updateSettings,
   registerPayment,
+  generateRenewalPeriod,
   sendTestEmail,
   sendProposalEmail,
   getProposalById,
@@ -120,11 +121,24 @@ export function ContractsDashboardClient({
   // Payment Modal
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedProposalForPayment, setSelectedProposalForPayment] = useState<Proposal | null>(null);
+  const [selectedPaymentIdForPayment, setSelectedPaymentIdForPayment] = useState<string | undefined>(undefined);
+  const [paymentNewExpirationDate, setPaymentNewExpirationDate] = useState<string | undefined>(undefined);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentNotes, setPaymentNotes] = useState('');
   const [paymentDesc, setPaymentDesc] = useState('');
+
+  // Renewal Modal
+  const [renewalModalOpen, setRenewalModalOpen] = useState(false);
+  const [selectedProposalForRenewal, setSelectedProposalForRenewal] = useState<Proposal | null>(null);
+  const [renewalStartDate, setRenewalStartDate] = useState('');
+  const [renewalEndDate, setRenewalEndDate] = useState('');
+  const [renewalDueDate, setRenewalDueDate] = useState('');
+  const [renewalAmount, setRenewalAmount] = useState('');
+  const [renewalDesc, setRenewalDesc] = useState('');
+  const [renewalNotifyClient, setRenewalNotifyClient] = useState(true);
+  const [isSubmittingRenewal, setIsSubmittingRenewal] = useState(false);
 
   // Details Modal
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -226,9 +240,27 @@ export function ContractsDashboardClient({
 
   const handleOpenPaymentModal = (prop: Proposal) => {
     setSelectedProposalForPayment(prop);
+    setSelectedPaymentIdForPayment(undefined);
+    setPaymentNewExpirationDate(undefined);
     const remaining = Math.max(0, (Number(prop.price) || 0) - (Number(prop.payment_amount) || 0));
     setPaymentAmount(remaining > 0 ? remaining.toString() : '');
     setPaymentDesc(`Abono cuota - ${prop.client_company}`);
+    setPaymentModalOpen(true);
+  };
+
+  const handleOpenPaymentModalForCuota = (prop: Proposal, payment: ProposalPayment) => {
+    setSelectedProposalForPayment(prop);
+    setSelectedPaymentIdForPayment(payment.id);
+    setPaymentAmount(payment.amount ? payment.amount.toString() : '');
+    setPaymentDesc(payment.description || `Pago cuota - ${prop.client_company}`);
+
+    // If the payment description has an end date like "al 2026-12-05", extract it
+    let newExp = payment.due_date;
+    const match = payment.description?.match(/al\s+(\d{4}-\d{2}-\d{2})/);
+    if (match) {
+      newExp = match[1];
+    }
+    setPaymentNewExpirationDate(newExp);
     setPaymentModalOpen(true);
   };
 
@@ -244,15 +276,77 @@ export function ContractsDashboardClient({
           payment_method: paymentMethod,
           payment_date: paymentDate,
           description: paymentDesc,
-          notes: paymentNotes
+          notes: paymentNotes,
+          payment_id: selectedPaymentIdForPayment,
+          new_expiration_date: paymentNewExpirationDate
         });
-        toast.success('Pago registrado exitosamente');
+        toast.success(
+          paymentNewExpirationDate
+            ? 'Pago registrado y vigencia del servicio extendida con éxito'
+            : 'Pago registrado exitosamente'
+        );
         setPaymentModalOpen(false);
         router.refresh();
       } catch (err: any) {
         toast.error(err.message || 'Error al registrar el pago');
       }
     });
+  };
+
+  const handleOpenRenewalModal = (prop: Proposal) => {
+    setSelectedProposalForRenewal(prop);
+
+    // Determine start date from current expiration or start date
+    const currentExp = prop.service_expiration || prop.start_date || new Date().toISOString().split('T')[0];
+    const startDate = currentExp.split('T')[0];
+
+    // Add 1 month for end date
+    const d = new Date(startDate);
+    d.setMonth(d.getMonth() + 1);
+    const endDate = d.toISOString().split('T')[0];
+
+    setRenewalStartDate(startDate);
+    setRenewalEndDate(endDate);
+    setRenewalDueDate(startDate);
+    setRenewalAmount(prop.price ? prop.price.toString() : '0');
+    setRenewalDesc(`Renovación Mensual: ${startDate} al ${endDate}`);
+    setRenewalNotifyClient(true);
+    setRenewalModalOpen(true);
+  };
+
+  const handleGenerateRenewalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProposalForRenewal || !renewalAmount) return;
+
+    setIsSubmittingRenewal(true);
+    try {
+      const res = await generateRenewalPeriod({
+        proposal_id: selectedProposalForRenewal.id,
+        amount: parseFloat(renewalAmount) || 0,
+        start_date: renewalStartDate,
+        end_date: renewalEndDate,
+        due_date: renewalDueDate,
+        description: renewalDesc,
+        notify_client: renewalNotifyClient,
+        client_email: selectedProposalForRenewal.client_email
+      });
+
+      if (!res.success) {
+        toast.error(res.error || 'Error al generar periodo de renovación');
+      } else {
+        toast.success(
+          renewalNotifyClient
+            ? 'Cuota de renovación generada y cliente notificado por correo'
+            : 'Cuota de renovación generada exitosamente'
+        );
+        setRenewalModalOpen(false);
+        router.refresh();
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error al generar periodo de renovación');
+    } finally {
+      setIsSubmittingRenewal(false);
+    }
   };
 
   const handleOpenDetails = async (propId: string) => {
@@ -867,9 +961,13 @@ export function ContractsDashboardClient({
                             </TableCell>
 
                             <TableCell>
-                              {isPaid ? (
+                              {prop.payments?.some((p) => p.status === 'PENDIENTE') ? (
+                                <Badge className='bg-amber-500/10 text-amber-500 border border-amber-500/30 text-xs font-semibold'>
+                                  RENOVACIÓN PENDIENTE
+                                </Badge>
+                              ) : isPaid ? (
                                 <Badge className='bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-xs font-semibold'>
-                                  PAGADO
+                                  VIGENTE
                                 </Badge>
                               ) : isPartial ? (
                                 <Badge className='bg-amber-500/10 text-amber-500 border border-amber-500/30 text-xs font-semibold'>
@@ -907,12 +1005,23 @@ export function ContractsDashboardClient({
                                   href={`/p/${prop.id}`}
                                   target='_blank'
                                   rel='noreferrer'
-                                  title='Abrir propuesta interactiva para el cliente'
+                                  title='Abrir portal interactivo del cliente'
                                 >
                                   <Button variant='ghost' size='sm' className='h-8 w-8 p-0 cursor-pointer text-muted-foreground hover:text-foreground'>
                                     <Icons.externalLink className='h-4 w-4' />
                                   </Button>
                                 </a>
+
+                                {/* Renovar Periodo / Cuota Recurrente */}
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  onClick={() => handleOpenRenewalModal(prop)}
+                                  className='h-8 w-8 p-0 cursor-pointer text-amber-500 hover:text-amber-400'
+                                  title='Renovar Periodo / Generar Cuota de Cobro'
+                                >
+                                  <Icons.calendarPlus className='h-4 w-4' />
+                                </Button>
 
                                 {/* Registrar Pago */}
                                 <Button
@@ -1636,15 +1745,21 @@ export function ContractsDashboardClient({
               />
             </div>
 
-            <div className='space-y-2'>
-              <Label>Notas Internas</Label>
-              <Textarea
-                rows={2}
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
-                placeholder='Detalles adicionales del pago'
-              />
-            </div>
+            {paymentNewExpirationDate ? (
+              <div className='space-y-1.5 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5'>
+                <Label className='text-xs text-emerald-600 dark:text-emerald-400 font-bold'>
+                  Nueva Fecha de Vigencia del Servicio
+                </Label>
+                <Input
+                  type='date'
+                  value={paymentNewExpirationDate}
+                  onChange={(e) => setPaymentNewExpirationDate(e.target.value)}
+                />
+                <p className='text-[10px] text-muted-foreground'>
+                  Al confirmar el pago, la vigencia del contrato se actualizará automáticamente a esta fecha.
+                </p>
+              </div>
+            ) : null}
 
             <DialogFooter className='pt-2'>
               <Button type='button' variant='outline' onClick={() => setPaymentModalOpen(false)}>
@@ -1712,22 +1827,54 @@ export function ContractsDashboardClient({
                   <p className='text-xs text-muted-foreground'>Sin pagos registrados</p>
                 ) : (
                   <div className='rounded-lg border border-border/40 divide-y divide-border/30'>
-                    {detailedProposal.payments.map((pm, idx) => (
-                      <div key={idx} className='p-2.5 flex justify-between items-center text-xs'>
-                        <div>
-                          <span className='font-semibold'>{pm.description || 'Cuota'}</span>
-                          <span className='text-muted-foreground ml-2'>
-                            {pm.payment_date} ({pm.payment_method})
-                          </span>
+                    {detailedProposal.payments.map((pm, idx) => {
+                      const isPending = pm.status === 'PENDIENTE';
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-2.5 flex justify-between items-center text-xs ${
+                            isPending ? 'bg-amber-500/10 border-l-2 border-amber-500' : ''
+                          }`}
+                        >
+                          <div>
+                            <span className='font-semibold'>{pm.description || 'Cuota'}</span>
+                            <span className='text-muted-foreground ml-2'>
+                              {isPending
+                                ? (pm.due_date ? `Vence: ${pm.due_date}` : 'Pendiente de pago')
+                                : `${pm.payment_date} (${pm.payment_method})`}
+                            </span>
+                          </div>
+                          <div className='flex items-center gap-2'>
+                            <span className={`font-bold ${isPending ? 'text-amber-500' : ''}`}>
+                              ${pm.amount}
+                            </span>
+                            <Badge
+                              variant='outline'
+                              className={`text-[10px] ${
+                                isPending
+                                  ? 'border-amber-500/40 text-amber-500 bg-amber-500/10 font-bold'
+                                  : 'border-emerald-500/30 text-emerald-500 bg-emerald-500/10'
+                              }`}
+                            >
+                              {pm.status}
+                            </Badge>
+                            {isPending && detailedProposal.proposal ? (
+                              <Button
+                                size='sm'
+                                variant='outline'
+                                onClick={() => {
+                                  setDetailsModalOpen(false);
+                                  handleOpenPaymentModalForCuota(detailedProposal.proposal!, pm);
+                                }}
+                                className='h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer'
+                              >
+                                Registrar Pago
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className='flex items-center gap-2'>
-                          <span className='font-bold'>${pm.amount}</span>
-                          <Badge variant='outline' className='text-[10px]'>
-                            {pm.status}
-                          </Badge>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1776,14 +1923,20 @@ export function ContractsDashboardClient({
       </Dialog>
 
       {/* ======================================================== */}
-      {/* MODAL: ENVIAR PROPUESTA POR CORREO */}
+      {/* MODAL: ENVIAR PROPUESTA / PORTAL POR CORREO */}
       {/* ======================================================== */}
       <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
         <DialogContent className='sm:max-w-md'>
           <DialogHeader>
-            <DialogTitle>Enviar Propuesta al Cliente</DialogTitle>
+            <DialogTitle>
+              {selectedProposalForEmail?.signature_image
+                ? 'Enviar Acceso al Portal de Cliente'
+                : 'Enviar Propuesta al Cliente'}
+            </DialogTitle>
             <DialogDescription>
-              Se enviará un correo con el enlace directo para revisar y firmar el contrato
+              {selectedProposalForEmail?.signature_image
+                ? 'El contrato ya se encuentra firmado. Se enviará un correo con el enlace directo al Portal de Seguimiento y Estado de Pagos.'
+                : 'Se enviará un correo con el enlace directo para revisar y formalizar con firma digital.'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSendProposalEmailSubmit} className='space-y-4 py-2'>
@@ -1802,7 +1955,137 @@ export function ContractsDashboardClient({
                 Cancelar
               </Button>
               <Button type='submit' disabled={isSendingProposal} className='bg-primary font-medium'>
-                {isSendingProposal ? 'Enviando...' : 'Enviar Propuesta'}
+                {isSendingProposal
+                  ? 'Enviando...'
+                  : selectedProposalForEmail?.signature_image
+                  ? 'Enviar Acceso al Portal'
+                  : 'Enviar Propuesta'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ======================================================== */}
+      {/* MODAL: RENOVAR PERIODO / CUOTA RECURRENTE */}
+      {/* ======================================================== */}
+      <Dialog open={renewalModalOpen} onOpenChange={setRenewalModalOpen}>
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle className='flex items-center gap-2'>
+              <Icons.calendarPlus className='h-5 w-5 text-amber-500' />
+              <span>Renovar Periodo de Servicio</span>
+            </DialogTitle>
+            <DialogDescription>
+              Genera la cuota de cobro para el siguiente ciclo recurrente de {selectedProposalForRenewal?.client_company}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleGenerateRenewalSubmit} className='space-y-4 py-2'>
+            <div className='p-3 rounded-lg border border-border/50 bg-muted/20 text-xs space-y-1.5'>
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground'>Cliente:</span>
+                <span className='font-bold'>{selectedProposalForRenewal?.client_name}</span>
+              </div>
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground'>Empresa:</span>
+                <span className='font-bold'>{selectedProposalForRenewal?.client_company}</span>
+              </div>
+              <div className='flex justify-between'>
+                <span className='text-muted-foreground'>Vigencia Actual:</span>
+                <span className='font-mono font-medium text-amber-500'>
+                  {selectedProposalForRenewal?.service_expiration?.split('T')[0] || selectedProposalForRenewal?.start_date?.split('T')[0] || 'No definida'}
+                </span>
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 gap-3'>
+              <div className='space-y-1.5'>
+                <Label className='text-xs'>Inicio Nuevo Periodo</Label>
+                <Input
+                  type='date'
+                  required
+                  value={renewalStartDate}
+                  onChange={(e) => {
+                    const newStart = e.target.value;
+                    setRenewalStartDate(newStart);
+                    if (newStart) {
+                      const d = new Date(newStart);
+                      d.setMonth(d.getMonth() + 1);
+                      const newEnd = d.toISOString().split('T')[0];
+                      setRenewalEndDate(newEnd);
+                      setRenewalDesc(`Renovación Mensual: ${newStart} al ${newEnd}`);
+                      setRenewalDueDate(newStart);
+                    }
+                  }}
+                />
+              </div>
+
+              <div className='space-y-1.5'>
+                <Label className='text-xs'>Fin Nuevo Periodo</Label>
+                <Input
+                  type='date'
+                  required
+                  value={renewalEndDate}
+                  onChange={(e) => setRenewalEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className='grid grid-cols-2 gap-3'>
+              <div className='space-y-1.5'>
+                <Label className='text-xs'>Monto Cuota (USD)</Label>
+                <Input
+                  type='number'
+                  step='0.01'
+                  required
+                  value={renewalAmount}
+                  onChange={(e) => setRenewalAmount(e.target.value)}
+                />
+              </div>
+
+              <div className='space-y-1.5'>
+                <Label className='text-xs'>Fecha Límite de Pago</Label>
+                <Input
+                  type='date'
+                  required
+                  value={renewalDueDate}
+                  onChange={(e) => setRenewalDueDate(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className='space-y-1.5'>
+              <Label className='text-xs'>Concepto de la Cuota</Label>
+              <Input
+                required
+                value={renewalDesc}
+                onChange={(e) => setRenewalDesc(e.target.value)}
+                placeholder='Ej: Renovación Mensual: 05/11/2026 al 05/12/2026'
+              />
+            </div>
+
+            <div className='flex items-center space-x-2 pt-2 border-t border-border/40'>
+              <Switch
+                id='notify-client'
+                checked={renewalNotifyClient}
+                onCheckedChange={setRenewalNotifyClient}
+              />
+              <Label htmlFor='notify-client' className='text-xs font-medium cursor-pointer'>
+                Enviar aviso de renovación por correo al cliente automáticamente
+              </Label>
+            </div>
+
+            <DialogFooter className='pt-2'>
+              <Button type='button' variant='outline' onClick={() => setRenewalModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type='submit'
+                disabled={isSubmittingRenewal}
+                className='bg-amber-600 hover:bg-amber-500 text-white font-medium'
+              >
+                {isSubmittingRenewal ? 'Generando...' : 'Generar Cuota de Renovación'}
               </Button>
             </DialogFooter>
           </form>
