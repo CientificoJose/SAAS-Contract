@@ -25,6 +25,7 @@ interface DynamicContractClientProps {
   collaborators: ProposalCollaborator[];
   globalSettings?: Record<string, string>;
   creatorProfile?: {
+    full_name?: string;
     tenant_name?: string;
     brand_logo_url?: string;
     brand_color_primary?: string;
@@ -403,7 +404,16 @@ export function DynamicContractClient({
     setStatusMessage(null);
   };
 
+  const advisorContactName =
+    creatorProfile?.full_name || creatorProfile?.tenant_name || globalSettings.brand_name || 'Administración';
+
   const totalProposalAmount = services.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
+  const oneTimeAmount = services
+    .filter((s) => s.billing_type === 'ONE_TIME')
+    .reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
+  const recurrentAmount = services
+    .filter((s) => s.billing_type === 'RECURRENT')
+    .reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
   const isRecurrent = services.some((s) => s.billing_type === 'RECURRENT');
   const pendingCuota = payments.find((p) => p.status === 'PENDIENTE');
 
@@ -580,7 +590,7 @@ export function DynamicContractClient({
                         </button>
                         <a
                           href={`https://wa.me/?text=${encodeURIComponent(
-                            `Hola Valentina, envío comprobante de renovación para ${proposal.client_company} por $${Number(pendingCuota.amount).toFixed(2)} USD (#${pendingCuota.invoice_number || proposal.invoice_number}).`
+                            `Hola ${advisorContactName}, envío comprobante de renovación para ${proposal.client_company} por $${Number(pendingCuota.amount).toFixed(2)} USD (#${pendingCuota.invoice_number || proposal.invoice_number}).`
                           )}`}
                           target='_blank'
                           rel='noopener noreferrer'
@@ -719,7 +729,16 @@ export function DynamicContractClient({
                               )}
                             </div>
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className='pt-3 border-t border-slate-100 text-[10px] flex items-center justify-between'>
+                            <span className='text-slate-500'>
+                              Inicio: {displayFriendlyDate(ser.start_date)}
+                            </span>
+                            <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200'>
+                              Proyecto de Pago Único
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -777,7 +796,7 @@ export function DynamicContractClient({
                       </div>
                       <a
                         href={`https://wa.me/?text=${encodeURIComponent(
-                          `Hola Valentina, envío reporte de pago de renovación de ${proposal.client_company} por $${Number(pendingCuota.amount).toFixed(2)} USD (#${pendingCuota.invoice_number || proposal.invoice_number}).`
+                          `Hola ${advisorContactName}, envío reporte de pago de renovación de ${proposal.client_company} por $${Number(pendingCuota.amount).toFixed(2)} USD (#${pendingCuota.invoice_number || proposal.invoice_number}).`
                         )}`}
                         target='_blank'
                         rel='noopener noreferrer'
@@ -882,9 +901,20 @@ export function DynamicContractClient({
                     <div key={ser.id || idx} className='border border-slate-200 rounded-xl p-5 bg-white shadow-sm'>
                       <div className='flex justify-between items-start mb-2'>
                         <div>
-                          <span className='text-[10px] text-slate-400 font-bold uppercase tracking-wider'>
-                            {ser.category_name}
-                          </span>
+                          <div className='flex items-center gap-2 mb-1'>
+                            <span className='text-[10px] text-slate-400 font-bold uppercase tracking-wider'>
+                              {ser.category_name}
+                            </span>
+                            {ser.billing_type === 'ONE_TIME' ? (
+                              <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200'>
+                                ⚡ Pago Único / Proyecto
+                              </span>
+                            ) : (
+                              <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200'>
+                                🔄 Recurrente ({ser.billing_cycle || 'Anual'})
+                              </span>
+                            )}
+                          </div>
                           <h4 className='font-bold text-base text-slate-900'>{ser.service_name}</h4>
                         </div>
                         <span className='text-sm font-bold text-orange-600'>${Number(ser.price).toFixed(2)} USD</span>

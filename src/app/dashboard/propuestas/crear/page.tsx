@@ -46,6 +46,46 @@ interface ServiceFormState {
   domain_expiration: string;
 }
 
+function detectBillingType(duration?: string): 'RECURRENT' | 'ONE_TIME' {
+  if (!duration) return 'RECURRENT';
+  const d = duration.toLowerCase();
+  if (
+    d.includes('único') ||
+    d.includes('unico') ||
+    d.includes('one') ||
+    d.includes('proyecto') ||
+    d.includes('puntual') ||
+    d.includes('fijo')
+  ) {
+    return 'ONE_TIME';
+  }
+  return 'RECURRENT';
+}
+
+function computeExpirationDate(
+  startDate: string,
+  billingType: 'RECURRENT' | 'ONE_TIME',
+  cycle: string
+): string {
+  if (billingType === 'ONE_TIME') return '';
+  const baseDate = startDate ? new Date(startDate) : new Date();
+  if (isNaN(baseDate.getTime())) return '';
+  const d = new Date(baseDate);
+  const cycleLower = (cycle || '').toLowerCase();
+
+  if (cycleLower.includes('mes') || cycleLower.includes('mensual') || cycleLower.includes('month')) {
+    d.setMonth(d.getMonth() + 1);
+  } else if (cycleLower.includes('trimest') || cycleLower.includes('quarter') || cycleLower.includes('3')) {
+    d.setMonth(d.getMonth() + 3);
+  } else if (cycleLower.includes('semest') || cycleLower.includes('6')) {
+    d.setMonth(d.getMonth() + 6);
+  } else {
+    // Default 1 año
+    d.setFullYear(d.getFullYear() + 1);
+  }
+  return d.toISOString().split('T')[0];
+}
+
 export default function CrearPropuestaPage() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -108,34 +148,40 @@ export default function CrearPropuestaPage() {
   // Servicios
   const [services, setServices] = useState<ServiceFormState[]>([]);
 
+  // Esquema de Cuotas Iniciales
+  const [scheduleType, setScheduleType] = useState<'full' | '50_50' | 'custom'>('full');
+  const [payments, setPayments] = useState<ProposalPayment[]>([
+    {
+      description: 'Pago Inicial / Contrato',
+      amount: 0,
+      status: 'PENDIENTE',
+      payment_date: new Date().toISOString().split('T')[0],
+      payment_method: 'Transferencia',
+      due_date: new Date().toISOString().split('T')[0]
+    }
+  ]);
+
   // Credenciales
   const [credentials, setCredentials] = useState<Credential[]>([
     { description: 'Panel de Administración', email: '', password: '', notes: '' }
   ]);
-  const [showCredentials, setShowCredentials] = useState(true);
 
   // Colaboradores
   const [collaborators, setCollaborators] = useState<ProposalCollaborator[]>([]);
 
-  // Pagos / Cuotas
-  const [payments, setPayments] = useState<ProposalPayment[]>([
-    { description: 'Pago Inicial / Contrato', amount: 0, status: 'PENDIENTE', payment_date: new Date().toISOString().split('T')[0], payment_method: 'Transferencia' }
-  ]);
-
-  // Cargar catálogo
+  // Cargar catálogo inicial
   useEffect(() => {
     getCatalog().then((cats) => {
       setCatalog(cats);
-      // Inicializar con el primer servicio disponible
       if (cats.length > 0 && cats[0].services && cats[0].services.length > 0) {
         const cat = cats[0];
         const srv = cat.services![0];
         const plan = srv && srv.plans && srv.plans.length > 0 ? srv.plans[0] : null;
 
         const todayISO = new Date().toISOString().split('T')[0];
-        const nextYear = new Date();
-        nextYear.setFullYear(nextYear.getFullYear() + 1);
-        const nextYearISO = nextYear.toISOString().split('T')[0];
+        const bType = detectBillingType(plan?.duration);
+        const bCycle = bType === 'ONE_TIME' ? 'Pago Único' : plan?.duration || '1 año';
+        const expDate = computeExpirationDate(todayISO, bType, bCycle);
 
         setServices([
           {
@@ -146,12 +192,12 @@ export default function CrearPropuestaPage() {
             service_name: srv.name,
             plan_name: plan ? plan.name : 'Personalizado',
             price: plan ? plan.price.toString() : '0',
-            billing_type: 'RECURRENT',
-            billing_cycle: plan?.duration || '1 año',
+            billing_type: bType,
+            billing_cycle: bCycle,
             features: plan?.features || '',
             policies: plan?.policies || cat.policies || '',
             start_date: todayISO,
-            expiration_date: nextYearISO,
+            expiration_date: expDate,
             domain_included: false,
             domain_expiration: ''
           }
@@ -162,39 +208,85 @@ export default function CrearPropuestaPage() {
 
   // Prefill branding with current tenant settings
   useEffect(() => {
-    getSettings().then((st) => {
-      if (st.brand_logo && st.brand_logo !== '/recurso.png') {
-        setBrandLogoUrl(st.brand_logo);
-      }
-      if (st.color_primary) {
-        setBrandColorPrimary(st.color_primary);
-      }
-      if (st.color_secondary) {
-        setBrandColorSecondary(st.color_secondary);
-      }
-    }).catch((err) => {
-      console.warn('Could not load tenant settings for proposal creation', err);
-    });
+    getSettings()
+      .then((st) => {
+        if (st.brand_logo && st.brand_logo !== '/recurso.png') {
+          setBrandLogoUrl(st.brand_logo);
+        }
+        if (st.color_primary) {
+          setBrandColorPrimary(st.color_primary);
+        }
+        if (st.color_secondary) {
+          setBrandColorSecondary(st.color_secondary);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load tenant settings for proposal creation', err);
+      });
 
-    getPaymentMethods().then((methods) => {
-      setPaymentMethodsList(methods);
-      const firstEnabled = methods.find((m) => m.enabled);
-      if (firstEnabled) {
-        setPaymentMethod(firstEnabled.name);
-      }
-    }).catch((err) => {
-      console.warn('Could not load payment methods for proposal creation', err);
-    });
+    getPaymentMethods()
+      .then((methods) => {
+        setPaymentMethodsList(methods);
+        const firstEnabled = methods.find((m) => m.enabled);
+        if (firstEnabled) {
+          setPaymentMethod(firstEnabled.name);
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load payment methods for proposal creation', err);
+      });
   }, []);
 
-  // Sincronizar monto del primer pago con la suma total
+  // Cálculos financieros
   const totalPrice = services.reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0);
+  const oneTimeTotal = services
+    .filter((s) => s.billing_type === 'ONE_TIME')
+    .reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0);
+  const recurrentTotal = services
+    .filter((s) => s.billing_type === 'RECURRENT')
+    .reduce((acc, curr) => acc + (parseFloat(curr.price) || 0), 0);
 
+  // Sincronizar cuotas cuando cambia totalPrice o el esquema de pago
   useEffect(() => {
-    if (payments.length === 1 && payments[0].amount !== totalPrice) {
-      setPayments([{ ...payments[0], amount: totalPrice }]);
+    const todayISO = new Date().toISOString().split('T')[0];
+    const deliveryDate = new Date();
+    deliveryDate.setDate(deliveryDate.getDate() + 15);
+    const deliveryDateISO = deliveryDate.toISOString().split('T')[0];
+
+    if (scheduleType === 'full') {
+      setPayments([
+        {
+          description: 'Pago Total Inicial / Contrato',
+          amount: totalPrice,
+          status: 'PENDIENTE',
+          payment_date: todayISO,
+          payment_method: paymentMethod || 'Transferencia',
+          due_date: todayISO
+        }
+      ]);
+    } else if (scheduleType === '50_50') {
+      const half = Math.round((totalPrice / 2) * 100) / 100;
+      const rest = Math.round((totalPrice - half) * 100) / 100;
+      setPayments([
+        {
+          description: 'Cuota 1: Anticipo de Inicio (50%)',
+          amount: half,
+          status: 'PENDIENTE',
+          payment_date: todayISO,
+          payment_method: paymentMethod || 'Transferencia',
+          due_date: todayISO
+        },
+        {
+          description: 'Cuota 2: Contra Entrega Final (50%)',
+          amount: rest,
+          status: 'PENDIENTE',
+          payment_date: '',
+          payment_method: paymentMethod || 'Transferencia',
+          due_date: deliveryDateISO
+        }
+      ]);
     }
-  }, [totalPrice, payments]);
+  }, [totalPrice, scheduleType, paymentMethod]);
 
   // Handlers para Servicios
   const handleAddService = () => {
@@ -204,9 +296,9 @@ export default function CrearPropuestaPage() {
     const plan = srv && srv.plans && srv.plans.length > 0 ? srv.plans[0] : null;
 
     const todayISO = new Date().toISOString().split('T')[0];
-    const nextYear = new Date();
-    nextYear.setFullYear(nextYear.getFullYear() + 1);
-    const nextYearISO = nextYear.toISOString().split('T')[0];
+    const bType = detectBillingType(plan?.duration);
+    const bCycle = bType === 'ONE_TIME' ? 'Pago Único' : plan?.duration || '1 año';
+    const expDate = computeExpirationDate(todayISO, bType, bCycle);
 
     setServices([
       ...services,
@@ -218,12 +310,12 @@ export default function CrearPropuestaPage() {
         service_name: srv ? srv.name : 'Nuevo Servicio',
         plan_name: plan ? plan.name : 'Personalizado',
         price: plan ? plan.price.toString() : '0',
-        billing_type: 'RECURRENT',
-        billing_cycle: plan?.duration || '1 año',
+        billing_type: bType,
+        billing_cycle: bCycle,
         features: plan?.features || '',
         policies: plan?.policies || cat.policies || '',
         start_date: todayISO,
-        expiration_date: nextYearISO,
+        expiration_date: expDate,
         domain_included: false,
         domain_expiration: ''
       }
@@ -249,12 +341,16 @@ export default function CrearPropuestaPage() {
           updated[index].service_name = firstSrv.name;
           const firstPlan = firstSrv.plans && firstSrv.plans.length > 0 ? firstSrv.plans[0] : null;
           if (firstPlan) {
+            const bType = detectBillingType(firstPlan.duration);
+            const bCycle = bType === 'ONE_TIME' ? 'Pago Único' : firstPlan.duration || '1 año';
             updated[index].plan_id = firstPlan.id;
             updated[index].plan_name = firstPlan.name;
             updated[index].price = firstPlan.price.toString();
-            updated[index].billing_cycle = firstPlan.duration || '1 año';
+            updated[index].billing_type = bType;
+            updated[index].billing_cycle = bCycle;
             updated[index].features = firstPlan.features || '';
             updated[index].policies = firstPlan.policies || cat.policies || '';
+            updated[index].expiration_date = computeExpirationDate(updated[index].start_date, bType, bCycle);
           }
         }
       }
@@ -268,12 +364,16 @@ export default function CrearPropuestaPage() {
         updated[index].service_name = srv.name;
         const firstPlan = srv.plans && srv.plans.length > 0 ? srv.plans[0] : null;
         if (firstPlan) {
+          const bType = detectBillingType(firstPlan.duration);
+          const bCycle = bType === 'ONE_TIME' ? 'Pago Único' : firstPlan.duration || '1 año';
           updated[index].plan_id = firstPlan.id;
           updated[index].plan_name = firstPlan.name;
           updated[index].price = firstPlan.price.toString();
-          updated[index].billing_cycle = firstPlan.duration || '1 año';
+          updated[index].billing_type = bType;
+          updated[index].billing_cycle = bCycle;
           updated[index].features = firstPlan.features || '';
           updated[index].policies = firstPlan.policies || cat?.policies || '';
+          updated[index].expiration_date = computeExpirationDate(updated[index].start_date, bType, bCycle);
         }
       }
     }
@@ -284,15 +384,83 @@ export default function CrearPropuestaPage() {
       const srv = cat?.services?.find((s) => s.id === updated[index].service_id);
       const plan = srv?.plans?.find((p) => p.id === value);
       if (plan) {
+        const bType = detectBillingType(plan.duration);
+        const bCycle = bType === 'ONE_TIME' ? 'Pago Único' : plan.duration || '1 año';
         updated[index].plan_name = plan.name;
         updated[index].price = plan.price.toString();
-        updated[index].billing_cycle = plan.duration || '1 año';
+        updated[index].billing_type = bType;
+        updated[index].billing_cycle = bCycle;
         updated[index].features = plan.features || '';
         updated[index].policies = plan.policies || cat?.policies || '';
+        updated[index].expiration_date = computeExpirationDate(updated[index].start_date, bType, bCycle);
+      }
+    }
+
+    // Si cambia directamente la modalidad (billing_type)
+    if (field === 'billing_type') {
+      if (value === 'ONE_TIME') {
+        updated[index].billing_cycle = 'Pago Único';
+        updated[index].expiration_date = '';
+      } else {
+        if (updated[index].billing_cycle === 'Pago Único') {
+          updated[index].billing_cycle = '1 mes';
+        }
+        updated[index].expiration_date = computeExpirationDate(
+          updated[index].start_date,
+          'RECURRENT',
+          updated[index].billing_cycle
+        );
+      }
+    }
+
+    // Si cambia el ciclo de cobro recurrente
+    if (field === 'billing_cycle') {
+      if (updated[index].billing_type === 'RECURRENT') {
+        updated[index].expiration_date = computeExpirationDate(
+          updated[index].start_date,
+          'RECURRENT',
+          value
+        );
+      }
+    }
+
+    // Si cambia la fecha de inicio
+    if (field === 'start_date') {
+      if (updated[index].billing_type === 'RECURRENT') {
+        updated[index].expiration_date = computeExpirationDate(
+          value,
+          'RECURRENT',
+          updated[index].billing_cycle
+        );
       }
     }
 
     setServices(updated);
+  };
+
+  // Handlers para Pagos / Cuotas manuales
+  const handleAddPayment = () => {
+    setPayments([
+      ...payments,
+      {
+        description: `Cuota #${payments.length + 1}`,
+        amount: 0,
+        status: 'PENDIENTE',
+        payment_date: '',
+        payment_method: paymentMethod || 'Transferencia',
+        due_date: ''
+      }
+    ]);
+  };
+
+  const handleRemovePayment = (index: number) => {
+    setPayments(payments.filter((_, i) => i !== index));
+  };
+
+  const handlePaymentChange = (index: number, field: keyof ProposalPayment, value: any) => {
+    const updated = [...payments];
+    updated[index] = { ...updated[index], [field]: value };
+    setPayments(updated);
   };
 
   // Handlers para Credenciales
@@ -378,7 +546,8 @@ export default function CrearPropuestaPage() {
 
   return (
     <div className='max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6'>
-      <div className='flex items-center justify-between'>
+      {/* HEADER & FINANCIAL SUMMARY */}
+      <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
         <div className='flex items-center gap-3'>
           <Link href='/dashboard'>
             <Button variant='ghost' size='sm' className='cursor-pointer text-muted-foreground hover:text-foreground'>
@@ -386,11 +555,44 @@ export default function CrearPropuestaPage() {
               Volver
             </Button>
           </Link>
-          <h1 className='text-2xl font-bold tracking-tight'>Crear Nueva Propuesta Comercial</h1>
+          <div>
+            <h1 className='text-2xl font-bold tracking-tight'>Crear Nueva Propuesta Comercial</h1>
+            <p className='text-xs text-muted-foreground mt-0.5'>
+              Define propuestas de pago único, servicios recurrentes o esquemas mixtos
+            </p>
+          </div>
         </div>
-        <div className='text-right'>
-          <span className='text-xs text-muted-foreground'>Total Estimado</span>
-          <div className='text-xl font-bold text-primary'>${totalPrice.toLocaleString()} USD</div>
+
+        {/* Breakdown financiero en tiempo real */}
+        <div className='flex items-center gap-4 bg-muted/40 px-4 py-2 rounded-xl border border-border/50 text-right'>
+          {oneTimeTotal > 0 && (
+            <div>
+              <span className='text-[10px] uppercase font-bold text-muted-foreground block'>
+                Pago Único
+              </span>
+              <span className='text-sm font-bold text-blue-600 dark:text-blue-400'>
+                ${oneTimeTotal.toLocaleString()} USD
+              </span>
+            </div>
+          )}
+          {recurrentTotal > 0 && (
+            <div>
+              <span className='text-[10px] uppercase font-bold text-muted-foreground block'>
+                Recurrente
+              </span>
+              <span className='text-sm font-bold text-purple-600 dark:text-purple-400'>
+                ${recurrentTotal.toLocaleString()} USD
+              </span>
+            </div>
+          )}
+          <div className='pl-3 border-l border-border/50'>
+            <span className='text-[10px] uppercase font-bold text-muted-foreground block'>
+              Inversión Total
+            </span>
+            <div className='text-xl font-black text-primary'>
+              ${totalPrice.toLocaleString()} USD
+            </div>
+          </div>
         </div>
       </div>
 
@@ -633,7 +835,7 @@ export default function CrearPropuestaPage() {
           </CardContent>
         </Card>
 
-        {/* SECCIÓN 2: SERVICIOS CONTRATADOS */}
+        {/* SECCIÓN 2: SERVICIOS CONTRATADOS (MODALIDAD PAGO ÚNICO VS RECURRENTE) */}
         <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
           <CardHeader className='flex flex-row items-center justify-between pb-3'>
             <div>
@@ -642,7 +844,7 @@ export default function CrearPropuestaPage() {
                 Servicios y Planes Incluidos ({services.length})
               </CardTitle>
               <CardDescription>
-                Selecciona del catálogo los servicios contratados y ajusta precios y vigencias
+                Define la naturaleza de cada servicio (Pago Único para entregables o Recurrente para suscripciones)
               </CardDescription>
             </div>
             <Button
@@ -662,16 +864,50 @@ export default function CrearPropuestaPage() {
               const currentServices = currentCat?.services || [];
               const currentSrv = currentServices.find((s) => s.id === srv.service_id);
               const currentPlans = currentSrv?.plans || [];
+              const isOneTime = srv.billing_type === 'ONE_TIME';
 
               return (
                 <div
                   key={idx}
-                  className='p-4 rounded-xl border border-border/50 bg-background/50 space-y-4 relative'
+                  className={`p-4 rounded-xl border transition-all space-y-4 relative ${
+                    isOneTime
+                      ? 'border-blue-500/30 bg-blue-500/5'
+                      : 'border-purple-500/30 bg-purple-500/5'
+                  }`}
                 >
-                  <div className='flex items-center justify-between border-b border-border/30 pb-2'>
-                    <Badge variant='outline' className='text-xs font-bold'>
-                      Servicio #{idx + 1}
-                    </Badge>
+                  <div className='flex items-center justify-between border-b border-border/30 pb-2.5'>
+                    <div className='flex items-center gap-2'>
+                      <Badge variant='outline' className='text-xs font-bold'>
+                        Servicio #{idx + 1}
+                      </Badge>
+
+                      {/* Selector de Modalidad */}
+                      <div className='flex items-center bg-background/80 border border-border/60 rounded-lg p-0.5 shadow-xs'>
+                        <button
+                          type='button'
+                          onClick={() => handleServiceChange(idx, 'billing_type', 'ONE_TIME')}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer flex items-center gap-1 ${
+                            isOneTime
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          <span>⚡ Pago Único (Proyecto)</span>
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => handleServiceChange(idx, 'billing_type', 'RECURRENT')}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition cursor-pointer flex items-center gap-1 ${
+                            !isOneTime
+                              ? 'bg-purple-600 text-white shadow-xs'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          <span>🔄 Recurrente (Suscripción)</span>
+                        </button>
+                      </div>
+                    </div>
+
                     {services.length > 1 ? (
                       <Button
                         type='button'
@@ -679,21 +915,22 @@ export default function CrearPropuestaPage() {
                         size='sm'
                         onClick={() => handleRemoveService(idx)}
                         className='h-7 w-7 p-0 text-destructive hover:text-destructive cursor-pointer'
+                        title='Eliminar servicio'
                       >
                         <Icons.trash className='h-3.5 w-3.5' />
                       </Button>
                     ) : null}
                   </div>
 
+                  {/* Fila 1: Catálogo */}
                   <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
-                    {/* Categoría */}
                     <div className='space-y-1.5'>
-                      <Label className='text-xs'>Categoría</Label>
+                      <Label className='text-xs font-semibold'>Categoría</Label>
                       <Select
                         value={srv.category_id}
                         onValueChange={(val) => handleServiceChange(idx, 'category_id', val)}
                       >
-                        <SelectTrigger className='text-xs h-9'>
+                        <SelectTrigger className='text-xs h-9 bg-background'>
                           <SelectValue placeholder='Categoría' />
                         </SelectTrigger>
                         <SelectContent>
@@ -706,14 +943,13 @@ export default function CrearPropuestaPage() {
                       </Select>
                     </div>
 
-                    {/* Servicio */}
                     <div className='space-y-1.5'>
-                      <Label className='text-xs'>Servicio</Label>
+                      <Label className='text-xs font-semibold'>Servicio</Label>
                       <Select
                         value={srv.service_id}
                         onValueChange={(val) => handleServiceChange(idx, 'service_id', val)}
                       >
-                        <SelectTrigger className='text-xs h-9'>
+                        <SelectTrigger className='text-xs h-9 bg-background'>
                           <SelectValue placeholder='Servicio' />
                         </SelectTrigger>
                         <SelectContent>
@@ -726,14 +962,13 @@ export default function CrearPropuestaPage() {
                       </Select>
                     </div>
 
-                    {/* Plan */}
                     <div className='space-y-1.5'>
-                      <Label className='text-xs'>Plan de Precios</Label>
+                      <Label className='text-xs font-semibold'>Plan del Catálogo</Label>
                       <Select
                         value={srv.plan_id}
                         onValueChange={(val) => handleServiceChange(idx, 'plan_id', val)}
                       >
-                        <SelectTrigger className='text-xs h-9'>
+                        <SelectTrigger className='text-xs h-9 bg-background'>
                           <SelectValue placeholder='Plan' />
                         </SelectTrigger>
                         <SelectContent>
@@ -747,53 +982,275 @@ export default function CrearPropuestaPage() {
                     </div>
                   </div>
 
-                  <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
-                    <div className='space-y-1.5'>
-                      <Label className='text-xs'>Precio Acordado (USD)</Label>
-                      <Input
-                        type='number'
-                        step='0.01'
-                        required
-                        value={srv.price}
-                        onChange={(e) => handleServiceChange(idx, 'price', e.target.value)}
-                        className='text-xs h-9 font-bold'
-                      />
-                    </div>
+                  {/* Fila 2: Tarifas y Vigencias según modalidad */}
+                  {isOneTime ? (
+                    <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20'>
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold text-blue-900 dark:text-blue-200'>
+                          Precio del Proyecto (USD)
+                        </Label>
+                        <Input
+                          type='number'
+                          step='0.01'
+                          required
+                          value={srv.price}
+                          onChange={(e) => handleServiceChange(idx, 'price', e.target.value)}
+                          className='text-xs h-9 font-bold bg-background'
+                          placeholder='0.00'
+                        />
+                      </div>
 
-                    <div className='space-y-1.5'>
-                      <Label className='text-xs'>Fecha de Inicio</Label>
-                      <Input
-                        type='date'
-                        value={srv.start_date}
-                        onChange={(e) => handleServiceChange(idx, 'start_date', e.target.value)}
-                        className='text-xs h-9'
-                      />
-                    </div>
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold text-blue-900 dark:text-blue-200'>
+                          Fecha de Inicio / Contratación
+                        </Label>
+                        <Input
+                          type='date'
+                          value={srv.start_date}
+                          onChange={(e) => handleServiceChange(idx, 'start_date', e.target.value)}
+                          className='text-xs h-9 bg-background'
+                        />
+                      </div>
 
-                    <div className='space-y-1.5'>
-                      <Label className='text-xs'>Fecha de Vencimiento</Label>
-                      <Input
-                        type='date'
-                        value={srv.expiration_date}
-                        onChange={(e) => handleServiceChange(idx, 'expiration_date', e.target.value)}
-                        className='text-xs h-9'
-                      />
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold text-muted-foreground'>
+                          Modalidad
+                        </Label>
+                        <div className='h-9 px-3 rounded-md border border-border/60 bg-background flex items-center text-xs font-bold text-blue-600'>
+                          Pago Único (Sin vencimiento)
+                        </div>
+                      </div>
                     </div>
+                  ) : (
+                    <div className='grid grid-cols-1 sm:grid-cols-4 gap-3 p-3 rounded-lg bg-purple-500/5 border border-purple-500/20'>
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold text-purple-900 dark:text-purple-200'>
+                          Tarifa Recurrente (USD)
+                        </Label>
+                        <Input
+                          type='number'
+                          step='0.01'
+                          required
+                          value={srv.price}
+                          onChange={(e) => handleServiceChange(idx, 'price', e.target.value)}
+                          className='text-xs h-9 font-bold bg-background'
+                          placeholder='0.00'
+                        />
+                      </div>
+
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold text-purple-900 dark:text-purple-200'>
+                          Ciclo de Renovación
+                        </Label>
+                        <Select
+                          value={srv.billing_cycle}
+                          onValueChange={(val) => handleServiceChange(idx, 'billing_cycle', val)}
+                        >
+                          <SelectTrigger className='text-xs h-9 bg-background'>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value='1 mes'>Mensual (cada 1 mes)</SelectItem>
+                            <SelectItem value='3 meses'>Trimestral (cada 3 meses)</SelectItem>
+                            <SelectItem value='6 meses'>Semestral (cada 6 meses)</SelectItem>
+                            <SelectItem value='1 año'>Anual (cada 1 año)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold text-purple-900 dark:text-purple-200'>
+                          Inicio del Periodo
+                        </Label>
+                        <Input
+                          type='date'
+                          value={srv.start_date}
+                          onChange={(e) => handleServiceChange(idx, 'start_date', e.target.value)}
+                          className='text-xs h-9 bg-background'
+                        />
+                      </div>
+
+                      <div className='space-y-1.5'>
+                        <Label className='text-xs font-semibold text-purple-900 dark:text-purple-200'>
+                          Próxima Renovación
+                        </Label>
+                        <Input
+                          type='date'
+                          value={srv.expiration_date}
+                          onChange={(e) => handleServiceChange(idx, 'expiration_date', e.target.value)}
+                          className='text-xs h-9 bg-background font-bold text-purple-600'
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Nota explicativa de la modalidad */}
+                  <div className='text-[11px] text-muted-foreground flex items-center gap-1.5'>
+                    <Icons.info className='h-3.5 w-3.5 shrink-0 text-muted-foreground/70' />
+                    <span>
+                      {isOneTime
+                        ? 'Este servicio es de pago único. Al firmarse y cobrarse el proyecto, quedará formalizado y no generará avisos de renovación periódica.'
+                        : `Este servicio renovará cada ${srv.billing_cycle}. Al vencer la fecha, el portal activará automáticamente el aviso de cobro.`}
+                    </span>
                   </div>
 
+                  {/* Características */}
                   <div className='space-y-1.5'>
-                    <Label className='text-xs'>Características Incluidas (una por línea)</Label>
+                    <Label className='text-xs font-semibold'>Características y Alcance Incluido (una por línea)</Label>
                     <Textarea
                       rows={2}
                       value={srv.features}
                       onChange={(e) => handleServiceChange(idx, 'features', e.target.value)}
                       placeholder='Características del servicio...'
-                      className='text-xs'
+                      className='text-xs bg-background'
                     />
                   </div>
                 </div>
               );
             })}
+          </CardContent>
+        </Card>
+
+        {/* SECCIÓN 2.5: ESQUEMA DE COBRO INICIAL Y CUOTAS */}
+        <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
+          <CardHeader className='pb-3'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <CardTitle className='text-base font-bold flex items-center gap-2'>
+                  <Icons.creditCard className='h-4 w-4 text-emerald-500' />
+                  Esquema de Cobro Inicial (Cronograma de Cuotas)
+                </CardTitle>
+                <CardDescription>
+                  Define si el contrato se cobra en 1 pago total o en cuotas (ej: anticipo 50% y entrega 50%)
+                </CardDescription>
+              </div>
+
+              {scheduleType === 'custom' && (
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={handleAddPayment}
+                  className='text-xs cursor-pointer'
+                >
+                  <Icons.add className='h-3.5 w-3.5 mr-1' />
+                  Añadir Cuota
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            {/* Opciones de esquema */}
+            <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+              <button
+                type='button'
+                onClick={() => setScheduleType('full')}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  scheduleType === 'full'
+                    ? 'border-primary bg-primary/10 shadow-xs'
+                    : 'border-border/60 bg-muted/20 hover:bg-muted/40'
+                }`}
+              >
+                <div className='font-bold text-xs flex items-center justify-between'>
+                  <span>100% al Inicio</span>
+                  {scheduleType === 'full' && <Icons.check className='h-3.5 w-3.5 text-primary' />}
+                </div>
+                <p className='text-[11px] text-muted-foreground mt-1'>
+                  Una única cuota inicial por el monto total (${totalPrice} USD)
+                </p>
+              </button>
+
+              <button
+                type='button'
+                onClick={() => setScheduleType('50_50')}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  scheduleType === '50_50'
+                    ? 'border-primary bg-primary/10 shadow-xs'
+                    : 'border-border/60 bg-muted/20 hover:bg-muted/40'
+                }`}
+              >
+                <div className='font-bold text-xs flex items-center justify-between'>
+                  <span>50% Anticipo / 50% Entrega</span>
+                  {scheduleType === '50_50' && <Icons.check className='h-3.5 w-3.5 text-primary' />}
+                </div>
+                <p className='text-[11px] text-muted-foreground mt-1'>
+                  2 cuotas automáticas de ${(totalPrice / 2).toFixed(2)} USD cada una
+                </p>
+              </button>
+
+              <button
+                type='button'
+                onClick={() => setScheduleType('custom')}
+                className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                  scheduleType === 'custom'
+                    ? 'border-primary bg-primary/10 shadow-xs'
+                    : 'border-border/60 bg-muted/20 hover:bg-muted/40'
+                }`}
+              >
+                <div className='font-bold text-xs flex items-center justify-between'>
+                  <span>Personalizado</span>
+                  {scheduleType === 'custom' && <Icons.check className='h-3.5 w-3.5 text-primary' />}
+                </div>
+                <p className='text-[11px] text-muted-foreground mt-1'>
+                  Crea cuotas manuales con montos y fechas específicas
+                </p>
+              </button>
+            </div>
+
+            {/* Listado de cuotas */}
+            <div className='space-y-2 pt-2'>
+              {payments.map((pm, idx) => (
+                <div
+                  key={idx}
+                  className='p-3 rounded-lg border border-border/50 bg-background/50 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center text-xs'
+                >
+                  <div className='sm:col-span-5 space-y-1'>
+                    <Label className='text-[11px] font-semibold'>Concepto de la Cuota</Label>
+                    <Input
+                      value={pm.description || ''}
+                      onChange={(e) => handlePaymentChange(idx, 'description', e.target.value)}
+                      className='h-8 text-xs'
+                      placeholder='Ej: Anticipo 50%'
+                    />
+                  </div>
+
+                  <div className='sm:col-span-3 space-y-1'>
+                    <Label className='text-[11px] font-semibold'>Monto (USD)</Label>
+                    <Input
+                      type='number'
+                      step='0.01'
+                      value={pm.amount || 0}
+                      onChange={(e) => handlePaymentChange(idx, 'amount', parseFloat(e.target.value) || 0)}
+                      className='h-8 text-xs font-bold'
+                    />
+                  </div>
+
+                  <div className='sm:col-span-3 space-y-1'>
+                    <Label className='text-[11px] font-semibold'>Fecha Límite</Label>
+                    <Input
+                      type='date'
+                      value={pm.due_date || ''}
+                      onChange={(e) => handlePaymentChange(idx, 'due_date', e.target.value)}
+                      className='h-8 text-xs'
+                    />
+                  </div>
+
+                  {scheduleType === 'custom' && payments.length > 1 ? (
+                    <div className='sm:col-span-1 flex justify-end pt-4 sm:pt-0'>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='sm'
+                        onClick={() => handleRemovePayment(idx)}
+                        className='h-8 w-8 p-0 text-destructive hover:text-destructive cursor-pointer'
+                      >
+                        <Icons.trash className='h-3.5 w-3.5' />
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 

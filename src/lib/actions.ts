@@ -333,6 +333,20 @@ export async function createProposal(data: {
     const brandPrimary = data.brand_color_primary || tenantProf?.brand_color_primary || '#0066FF';
     const brandSecondary = data.brand_color_secondary || tenantProf?.brand_color_secondary || '#00F0FF';
 
+    const hasRecurrent = data.services.some((s) => s.billing_type === 'RECURRENT');
+    const hasOneTime = data.services.some((s) => s.billing_type === 'ONE_TIME');
+    const recurrentService = data.services.find((s) => s.billing_type === 'RECURRENT');
+
+    let calculatedDuration = 'Pago Único';
+    if (hasRecurrent && hasOneTime) {
+      calculatedDuration = 'Mixto (Setup + Recurrente)';
+    } else if (hasRecurrent) {
+      calculatedDuration = recurrentService?.billing_cycle || 'Recurrente';
+    }
+
+    const calculatedStartDate = data.services[0]?.start_date || new Date().toISOString().split('T')[0];
+    const calculatedExpiration = recurrentService?.expiration_date || null;
+
     const { error: pError } = await supabaseAdmin.from('proposals').insert({
       id: proposalId,
       user_id: userId,
@@ -342,6 +356,11 @@ export async function createProposal(data: {
       client_email: data.client_email || '',
       service_name: firstService ? firstService.service_name : '',
       plan_name: firstService ? firstService.plan_name : '',
+      start_date: calculatedStartDate,
+      duration: calculatedDuration,
+      service_expiration: calculatedExpiration,
+      category_name: firstService ? firstService.category_name : '',
+      features: firstService ? firstService.features : '',
       price: totalAmount,
       invoice_number: data.invoice_number,
       payment_status: data.payment_status || 'PENDIENTE',

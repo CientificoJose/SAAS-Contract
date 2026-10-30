@@ -300,16 +300,35 @@ export function ContractsDashboardClient({
     const currentExp = prop.service_expiration || prop.start_date || new Date().toISOString().split('T')[0];
     const startDate = currentExp.split('T')[0];
 
-    // Add 1 month for end date
+    // Determine cycle and amount from recurrent services if present
+    const recurrentServices = prop.services?.filter((s) => s.billing_type === 'RECURRENT') || [];
+    const firstRecurrent = recurrentServices[0];
+    const cycle = (firstRecurrent?.billing_cycle || prop.duration || '').toLowerCase();
+
     const d = new Date(startDate);
-    d.setMonth(d.getMonth() + 1);
+    if (cycle.includes('año') || cycle.includes('year') || cycle.includes('anual')) {
+      d.setFullYear(d.getFullYear() + 1);
+    } else if (cycle.includes('trimest') || cycle.includes('quarter') || cycle.includes('3')) {
+      d.setMonth(d.getMonth() + 3);
+    } else if (cycle.includes('semest') || cycle.includes('6')) {
+      d.setMonth(d.getMonth() + 6);
+    } else {
+      d.setMonth(d.getMonth() + 1);
+    }
     const endDate = d.toISOString().split('T')[0];
+
+    const recurrentAmount =
+      recurrentServices.length > 0
+        ? recurrentServices.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0)
+        : Number(prop.price) || 0;
+
+    const cycleLabel = firstRecurrent?.billing_cycle || prop.duration || 'Periodo';
 
     setRenewalStartDate(startDate);
     setRenewalEndDate(endDate);
     setRenewalDueDate(startDate);
-    setRenewalAmount(prop.price ? prop.price.toString() : '0');
-    setRenewalDesc(`Renovación Mensual: ${startDate} al ${endDate}`);
+    setRenewalAmount(recurrentAmount.toString());
+    setRenewalDesc(`Renovación (${cycleLabel}): ${startDate} al ${endDate}`);
     setRenewalNotifyClient(true);
     setRenewalModalOpen(true);
   };
@@ -923,6 +942,16 @@ export function ContractsDashboardClient({
                         const isPaid = prop.payment_status === 'PAGADO';
                         const isPartial = prop.payment_status === 'PARCIAL';
 
+                        const hasRecurrent =
+                          prop.services?.some((s) => s.billing_type === 'RECURRENT') ||
+                          (prop.duration && prop.duration !== 'Pago Único' && prop.duration !== 'Un único pago');
+                        const hasOneTime =
+                          prop.services?.some((s) => s.billing_type === 'ONE_TIME') ||
+                          prop.duration === 'Pago Único' ||
+                          prop.duration === 'Un único pago';
+                        const isMixed = hasRecurrent && hasOneTime;
+                        const isPureOneTime = hasOneTime && !hasRecurrent;
+
                         return (
                           <TableRow key={prop.id} className='hover:bg-muted/30 transition-colors'>
                             <TableCell>
@@ -940,13 +969,36 @@ export function ContractsDashboardClient({
                               </div>
                             </TableCell>
 
-                            <TableCell className='max-w-[240px]'>
+                            <TableCell className='max-w-[260px]'>
+                              <div className='flex items-center gap-1.5 flex-wrap mb-1'>
+                                {isPureOneTime ? (
+                                  <Badge className='bg-blue-500/10 text-blue-500 border border-blue-500/30 text-[10px] font-bold py-0'>
+                                    PAGO ÚNICO
+                                  </Badge>
+                                ) : isMixed ? (
+                                  <Badge className='bg-indigo-500/10 text-indigo-500 border border-indigo-500/30 text-[10px] font-bold py-0'>
+                                    MIXTO
+                                  </Badge>
+                                ) : (
+                                  <Badge className='bg-purple-500/10 text-purple-500 border border-purple-500/30 text-[10px] font-bold py-0'>
+                                    RECURRENTE ({prop.duration || 'ANUAL'})
+                                  </Badge>
+                                )}
+                                <span className='text-xs text-muted-foreground font-mono'>
+                                  #{prop.invoice_number}
+                                </span>
+                              </div>
                               <div className='text-sm font-medium truncate' title={servicesList}>
                                 {servicesList}
                               </div>
-                              <div className='text-xs text-muted-foreground font-mono'>
-                                #{prop.invoice_number}
-                              </div>
+                              {hasRecurrent && prop.service_expiration ? (
+                                <div className='text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5'>
+                                  <Icons.calendar className='h-3 w-3 text-purple-400 shrink-0' />
+                                  <span>
+                                    Próx. Renovación: <strong>{prop.service_expiration.split('T')[0]}</strong>
+                                  </span>
+                                </div>
+                              ) : null}
                             </TableCell>
 
                             <TableCell>
@@ -1012,16 +1064,18 @@ export function ContractsDashboardClient({
                                   </Button>
                                 </a>
 
-                                {/* Renovar Periodo / Cuota Recurrente */}
-                                <Button
-                                  variant='ghost'
-                                  size='sm'
-                                  onClick={() => handleOpenRenewalModal(prop)}
-                                  className='h-8 w-8 p-0 cursor-pointer text-amber-500 hover:text-amber-400'
-                                  title='Renovar Periodo / Generar Cuota de Cobro'
-                                >
-                                  <Icons.calendarPlus className='h-4 w-4' />
-                                </Button>
+                                {/* Renovar Periodo / Cuota Recurrente (Solo para contratos con recurrentes) */}
+                                {!isPureOneTime && (
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => handleOpenRenewalModal(prop)}
+                                    className='h-8 w-8 p-0 cursor-pointer text-amber-500 hover:text-amber-400'
+                                    title='Renovar Periodo / Generar Cuota de Cobro'
+                                  >
+                                    <Icons.calendarPlus className='h-4 w-4' />
+                                  </Button>
+                                )}
 
                                 {/* Registrar Pago */}
                                 <Button
@@ -2242,7 +2296,7 @@ export function ContractsDashboardClient({
               <Input
                 required
                 value={editSerName}
-                onChange={(e) => setNewSerName(e.target.value)}
+                onChange={(e) => setEditSerName(e.target.value)}
               />
             </div>
             <DialogFooter>
