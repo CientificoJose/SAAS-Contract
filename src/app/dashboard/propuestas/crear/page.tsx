@@ -18,15 +18,29 @@ import type {
   ProposalPayment,
   PaymentMethodConfig
 } from '@/lib/supabase/types';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
+import { useGuidedTour } from '@/hooks/use-guided-tour';
 
 interface ServiceFormState {
   category_id: string;
@@ -73,9 +87,17 @@ function computeExpirationDate(
   const d = new Date(baseDate);
   const cycleLower = (cycle || '').toLowerCase();
 
-  if (cycleLower.includes('mes') || cycleLower.includes('mensual') || cycleLower.includes('month')) {
+  if (
+    cycleLower.includes('mes') ||
+    cycleLower.includes('mensual') ||
+    cycleLower.includes('month')
+  ) {
     d.setMonth(d.getMonth() + 1);
-  } else if (cycleLower.includes('trimest') || cycleLower.includes('quarter') || cycleLower.includes('3')) {
+  } else if (
+    cycleLower.includes('trimest') ||
+    cycleLower.includes('quarter') ||
+    cycleLower.includes('3')
+  ) {
     d.setMonth(d.getMonth() + 3);
   } else if (cycleLower.includes('semest') || cycleLower.includes('6')) {
     d.setMonth(d.getMonth() + 6);
@@ -89,6 +111,7 @@ function computeExpirationDate(
 export default function CrearPropuestaPage() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { startCreatorTour } = useGuidedTour();
   const [catalog, setCatalog] = useState<CatalogCategory[]>([]);
 
   // Cliente
@@ -96,7 +119,9 @@ export default function CrearPropuestaPage() {
   const [clientCompany, setClientCompany] = useState('');
   const [clientDomain, setClientDomain] = useState('');
   const [clientEmail, setClientEmail] = useState('');
-  const [invoiceNumber, setInvoiceNumber] = useState(`FAC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`);
+  const [invoiceNumber, setInvoiceNumber] = useState(
+    `FAC-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`
+  );
   const [paymentStatus, setPaymentStatus] = useState('PENDIENTE');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentMethod, setPaymentMethod] = useState('Transferencia Bancaria');
@@ -271,7 +296,8 @@ export default function CrearPropuestaPage() {
         {
           description: 'Cuota 1: Anticipo de Inicio (50%)',
           amount: half,
-          status: paymentStatus === 'PAGADO' || paymentStatus === 'PARCIAL' ? 'PAGADO' : 'PENDIENTE',
+          status:
+            paymentStatus === 'PAGADO' || paymentStatus === 'PARCIAL' ? 'PAGADO' : 'PENDIENTE',
           payment_date: todayISO,
           payment_method: paymentMethod || 'Transferencia',
           due_date: todayISO
@@ -350,7 +376,11 @@ export default function CrearPropuestaPage() {
             updated[index].billing_cycle = bCycle;
             updated[index].features = firstPlan.features || '';
             updated[index].policies = firstPlan.policies || cat.policies || '';
-            updated[index].expiration_date = computeExpirationDate(updated[index].start_date, bType, bCycle);
+            updated[index].expiration_date = computeExpirationDate(
+              updated[index].start_date,
+              bType,
+              bCycle
+            );
           }
         }
       }
@@ -373,7 +403,11 @@ export default function CrearPropuestaPage() {
           updated[index].billing_cycle = bCycle;
           updated[index].features = firstPlan.features || '';
           updated[index].policies = firstPlan.policies || cat?.policies || '';
-          updated[index].expiration_date = computeExpirationDate(updated[index].start_date, bType, bCycle);
+          updated[index].expiration_date = computeExpirationDate(
+            updated[index].start_date,
+            bType,
+            bCycle
+          );
         }
       }
     }
@@ -392,7 +426,11 @@ export default function CrearPropuestaPage() {
         updated[index].billing_cycle = bCycle;
         updated[index].features = plan.features || '';
         updated[index].policies = plan.policies || cat?.policies || '';
-        updated[index].expiration_date = computeExpirationDate(updated[index].start_date, bType, bCycle);
+        updated[index].expiration_date = computeExpirationDate(
+          updated[index].start_date,
+          bType,
+          bCycle
+        );
       }
     }
 
@@ -519,10 +557,10 @@ export default function CrearPropuestaPage() {
       paymentStatus === 'PAGADO'
         ? totalPrice
         : paymentStatus === 'PARCIAL'
-        ? scheduleType === '50_50'
-          ? Math.round((totalPrice / 2) * 100) / 100
-          : 0
-        : 0;
+          ? scheduleType === '50_50'
+            ? Math.round((totalPrice / 2) * 100) / 100
+            : 0
+          : 0;
 
     startTransition(async () => {
       try {
@@ -561,13 +599,30 @@ export default function CrearPropuestaPage() {
       <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
         <div className='flex items-center gap-3'>
           <Link href='/dashboard'>
-            <Button variant='ghost' size='sm' className='cursor-pointer text-muted-foreground hover:text-foreground'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='cursor-pointer text-muted-foreground hover:text-foreground'
+            >
               <Icons.chevronLeft className='h-4 w-4 mr-1' />
               Volver
             </Button>
           </Link>
           <div>
-            <h1 className='text-2xl font-bold tracking-tight'>Crear Nueva Propuesta Comercial</h1>
+            <div className='flex items-center gap-2.5 flex-wrap'>
+              <h1 className='text-2xl font-bold tracking-tight'>Crear Nueva Propuesta Comercial</h1>
+              <Button
+                type='button'
+                variant='outline'
+                size='xs'
+                onClick={startCreatorTour}
+                className='cursor-pointer text-xs flex items-center gap-1.5 border-primary/40 bg-primary/5 text-primary hover:bg-primary/15 transition-all shadow-xs'
+                title='Iniciar Tour Guiado Interactivo'
+              >
+                <Icons.help className='h-3.5 w-3.5' />
+                <span>Tour Guiado</span>
+              </Button>
+            </div>
             <p className='text-xs text-muted-foreground mt-0.5'>
               Define propuestas de pago único, servicios recurrentes o esquemas mixtos
             </p>
@@ -575,7 +630,10 @@ export default function CrearPropuestaPage() {
         </div>
 
         {/* Breakdown financiero en tiempo real */}
-        <div className='flex items-center gap-4 bg-muted/40 px-4 py-2 rounded-xl border border-border/50 text-right'>
+        <div
+          id='financial-header-summary'
+          className='flex items-center gap-4 bg-muted/40 px-4 py-2 rounded-xl border border-border/50 text-right'
+        >
           {oneTimeTotal > 0 && (
             <div>
               <span className='text-[10px] uppercase font-bold text-muted-foreground block'>
@@ -609,7 +667,7 @@ export default function CrearPropuestaPage() {
 
       <form onSubmit={handleSubmit} className='space-y-6'>
         {/* SECCIÓN 1: DATOS DEL CLIENTE Y FACTURA */}
-        <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
+        <Card id='section-client-info' className='border-border/60 bg-card/60 backdrop-blur-sm'>
           <CardHeader>
             <CardTitle className='text-base font-bold flex items-center gap-2'>
               <Icons.user className='h-4 w-4 text-primary' />
@@ -687,7 +745,10 @@ export default function CrearPropuestaPage() {
                     Gestionar métodos
                   </Link>
                 </div>
-                <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val || 'Transferencia Bancaria')}>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(val) => setPaymentMethod(val || 'Transferencia Bancaria')}
+                >
                   <SelectTrigger id='paymentMethod'>
                     <SelectValue placeholder='Selecciona método' />
                   </SelectTrigger>
@@ -710,7 +771,9 @@ export default function CrearPropuestaPage() {
                       ))}
                     {paymentMethodsList.filter((m) => m.enabled).length === 0 && (
                       <>
-                        <SelectItem value='Transferencia Bancaria'>Transferencia Bancaria</SelectItem>
+                        <SelectItem value='Transferencia Bancaria'>
+                          Transferencia Bancaria
+                        </SelectItem>
                         <SelectItem value='Binance Pay (USDT)'>Binance Pay (USDT)</SelectItem>
                         <SelectItem value='Zelle'>Zelle</SelectItem>
                       </>
@@ -721,7 +784,10 @@ export default function CrearPropuestaPage() {
 
               <div className='space-y-2'>
                 <Label htmlFor='paymentStatus'>Estado Inicial del Pago</Label>
-                <Select value={paymentStatus} onValueChange={(val) => setPaymentStatus(val || 'PENDIENTE')}>
+                <Select
+                  value={paymentStatus}
+                  onValueChange={(val) => setPaymentStatus(val || 'PENDIENTE')}
+                >
                   <SelectTrigger id='paymentStatus'>
                     <SelectValue />
                   </SelectTrigger>
@@ -737,14 +803,18 @@ export default function CrearPropuestaPage() {
         </Card>
 
         {/* SECCIÓN 1.5: BRANDING Y LOGO DE LA PROPUESTA (SUPABASE STORAGE) */}
-        <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
+        <Card
+          id='section-proposal-branding'
+          className='border-border/60 bg-card/60 backdrop-blur-sm'
+        >
           <CardHeader className='pb-3'>
             <CardTitle className='text-base font-bold flex items-center gap-2'>
               <Icons.palette className='h-4 w-4 text-blue-500' />
               Personalización de Marca y Logotipo (Opcional)
             </CardTitle>
             <CardDescription>
-              Sube el logo del cliente o de la propuesta a Supabase Storage, o déjalo vacío para usar el logo predeterminado
+              Sube el logo del cliente o de la propuesta a Supabase Storage, o déjalo vacío para
+              usar el logo predeterminado
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4'>
@@ -806,7 +876,9 @@ export default function CrearPropuestaPage() {
 
             <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
               <div className='space-y-2'>
-                <Label htmlFor='brandColorPrimary' className='text-xs'>Color Primario (Acento / Botones)</Label>
+                <Label htmlFor='brandColorPrimary' className='text-xs'>
+                  Color Primario (Acento / Botones)
+                </Label>
                 <div className='flex items-center gap-2'>
                   <input
                     type='color'
@@ -825,7 +897,9 @@ export default function CrearPropuestaPage() {
               </div>
 
               <div className='space-y-2'>
-                <Label htmlFor='brandColorSecondary' className='text-xs'>Color Secundario (Encabezados / Detalles)</Label>
+                <Label htmlFor='brandColorSecondary' className='text-xs'>
+                  Color Secundario (Encabezados / Detalles)
+                </Label>
                 <div className='flex items-center gap-2'>
                   <input
                     type='color'
@@ -847,7 +921,7 @@ export default function CrearPropuestaPage() {
         </Card>
 
         {/* SECCIÓN 2: SERVICIOS CONTRATADOS (MODALIDAD PAGO ÚNICO VS RECURRENTE) */}
-        <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
+        <Card id='section-services-list' className='border-border/60 bg-card/60 backdrop-blur-sm'>
           <CardHeader className='flex flex-row items-center justify-between pb-3'>
             <div>
               <CardTitle className='text-base font-bold flex items-center gap-2'>
@@ -855,7 +929,8 @@ export default function CrearPropuestaPage() {
                 Servicios y Planes Incluidos ({services.length})
               </CardTitle>
               <CardDescription>
-                Define la naturaleza de cada servicio (Pago Único para entregables o Recurrente para suscripciones)
+                Define la naturaleza de cada servicio (Pago Único para entregables o Recurrente para
+                suscripciones)
               </CardDescription>
             </div>
             <Button
@@ -1088,7 +1163,9 @@ export default function CrearPropuestaPage() {
                         <Input
                           type='date'
                           value={srv.expiration_date}
-                          onChange={(e) => handleServiceChange(idx, 'expiration_date', e.target.value)}
+                          onChange={(e) =>
+                            handleServiceChange(idx, 'expiration_date', e.target.value)
+                          }
                           className='text-xs h-9 bg-background font-bold text-purple-600'
                         />
                       </div>
@@ -1107,7 +1184,9 @@ export default function CrearPropuestaPage() {
 
                   {/* Características */}
                   <div className='space-y-1.5'>
-                    <Label className='text-xs font-semibold'>Características y Alcance Incluido (una por línea)</Label>
+                    <Label className='text-xs font-semibold'>
+                      Características y Alcance Incluido (una por línea)
+                    </Label>
                     <Textarea
                       rows={2}
                       value={srv.features}
@@ -1123,7 +1202,10 @@ export default function CrearPropuestaPage() {
         </Card>
 
         {/* SECCIÓN 2.5: ESQUEMA DE COBRO INICIAL Y CUOTAS */}
-        <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
+        <Card
+          id='section-payment-schedule'
+          className='border-border/60 bg-card/60 backdrop-blur-sm'
+        >
           <CardHeader className='pb-3'>
             <div className='flex items-center justify-between'>
               <div>
@@ -1132,7 +1214,8 @@ export default function CrearPropuestaPage() {
                   Esquema de Cobro Inicial (Cronograma de Cuotas)
                 </CardTitle>
                 <CardDescription>
-                  Define si el contrato se cobra en 1 pago total o en cuotas (ej: anticipo 50% y entrega 50%)
+                  Define si el contrato se cobra en 1 pago total o en cuotas (ej: anticipo 50% y
+                  entrega 50%)
                 </CardDescription>
               </div>
 
@@ -1200,7 +1283,9 @@ export default function CrearPropuestaPage() {
               >
                 <div className='font-bold text-xs flex items-center justify-between'>
                   <span>Personalizado</span>
-                  {scheduleType === 'custom' && <Icons.check className='h-3.5 w-3.5 text-primary' />}
+                  {scheduleType === 'custom' && (
+                    <Icons.check className='h-3.5 w-3.5 text-primary' />
+                  )}
                 </div>
                 <p className='text-[11px] text-muted-foreground mt-1'>
                   Crea cuotas manuales con montos y fechas específicas
@@ -1231,7 +1316,9 @@ export default function CrearPropuestaPage() {
                       type='number'
                       step='0.01'
                       value={pm.amount || 0}
-                      onChange={(e) => handlePaymentChange(idx, 'amount', parseFloat(e.target.value) || 0)}
+                      onChange={(e) =>
+                        handlePaymentChange(idx, 'amount', parseFloat(e.target.value) || 0)
+                      }
                       className='h-8 text-xs font-bold'
                     />
                   </div>
@@ -1266,7 +1353,7 @@ export default function CrearPropuestaPage() {
         </Card>
 
         {/* SECCIÓN 3: ACCESOS Y CREDENCIALES (PORTAL CLIENTE) */}
-        <Card className='border-border/60 bg-card/60 backdrop-blur-sm'>
+        <Card id='section-credentials' className='border-border/60 bg-card/60 backdrop-blur-sm'>
           <CardHeader className='flex flex-row items-center justify-between pb-3'>
             <div>
               <CardTitle className='text-base font-bold flex items-center gap-2'>
@@ -1293,7 +1380,8 @@ export default function CrearPropuestaPage() {
               <div className='p-6 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
                 <Icons.lock className='h-8 w-8 mx-auto text-muted-foreground/40 mb-2' />
                 <p className='text-xs text-muted-foreground max-w-sm mx-auto'>
-                  No hay credenciales añadidas aún. Si este proyecto requiere accesos confidenciales para el cliente (CPanel, CMS, etc.), puedes agregarlos aquí.
+                  No hay credenciales añadidas aún. Si este proyecto requiere accesos confidenciales
+                  para el cliente (CPanel, CMS, etc.), puedes agregarlos aquí.
                 </p>
                 <Button
                   type='button'
@@ -1374,6 +1462,7 @@ export default function CrearPropuestaPage() {
             </Button>
           </Link>
           <Button
+            id='btn-submit-proposal'
             type='submit'
             disabled={isPending}
             className='bg-primary text-primary-foreground hover:bg-primary/90 font-bold px-8 cursor-pointer shadow-lg'

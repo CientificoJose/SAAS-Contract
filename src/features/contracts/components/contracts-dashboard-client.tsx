@@ -73,6 +73,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { Icons } from '@/components/icons';
+import { useGuidedTour } from '@/hooks/use-guided-tour';
 
 interface ContractsDashboardClientProps {
   initialProposals: (Proposal & { services?: ProposalService[] })[];
@@ -91,15 +92,20 @@ export function ContractsDashboardClient({
 }: ContractsDashboardClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { startDashboardTour } = useGuidedTour();
 
   const [activeTab, setActiveTab] = useState('propuestas');
   const [proposals, setProposals] = useState(initialProposals);
   const [catalog, setCatalog] = useState(initialCatalog);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Settings state
   const [settings, setSettings] = useState(initialSettings);
   const [brandName, setBrandName] = useState(initialSettings.brand_name || 'ContractCloud');
-  const [brandLogo, setBrandLogo] = useState(initialSettings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg');
+  const [brandLogo, setBrandLogo] = useState(
+    initialSettings.brand_logo ||
+      'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg'
+  );
   const [colorPrim, setColorPrim] = useState(initialSettings.color_primary || '#0066FF');
   const [colorSec, setColorSec] = useState(initialSettings.color_secondary || '#00F0FF');
   const [smtpHost, setSmtpHost] = useState(initialSettings.smtp_host || 'mail.press-cloud.com');
@@ -120,9 +126,15 @@ export function ContractsDashboardClient({
 
   // Payment Modal
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [selectedProposalForPayment, setSelectedProposalForPayment] = useState<Proposal | null>(null);
-  const [selectedPaymentIdForPayment, setSelectedPaymentIdForPayment] = useState<string | undefined>(undefined);
-  const [paymentNewExpirationDate, setPaymentNewExpirationDate] = useState<string | undefined>(undefined);
+  const [selectedProposalForPayment, setSelectedProposalForPayment] = useState<Proposal | null>(
+    null
+  );
+  const [selectedPaymentIdForPayment, setSelectedPaymentIdForPayment] = useState<
+    string | undefined
+  >(undefined);
+  const [paymentNewExpirationDate, setPaymentNewExpirationDate] = useState<string | undefined>(
+    undefined
+  );
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Transferencia');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -131,7 +143,9 @@ export function ContractsDashboardClient({
 
   // Renewal Modal
   const [renewalModalOpen, setRenewalModalOpen] = useState(false);
-  const [selectedProposalForRenewal, setSelectedProposalForRenewal] = useState<Proposal | null>(null);
+  const [selectedProposalForRenewal, setSelectedProposalForRenewal] = useState<Proposal | null>(
+    null
+  );
   const [renewalStartDate, setRenewalStartDate] = useState('');
   const [renewalEndDate, setRenewalEndDate] = useState('');
   const [renewalDueDate, setRenewalDueDate] = useState('');
@@ -196,13 +210,17 @@ export function ContractsDashboardClient({
       ? initialPaymentMethods
       : DEFAULT_PAYMENT_METHODS
   );
-  const [selectedMethodForEdit, setSelectedMethodForEdit] = useState<PaymentMethodConfig | null>(null);
+  const [selectedMethodForEdit, setSelectedMethodForEdit] = useState<PaymentMethodConfig | null>(
+    null
+  );
   const [editMethodModalOpen, setEditMethodModalOpen] = useState(false);
   const [createMethodModalOpen, setCreateMethodModalOpen] = useState(false);
 
   // New Custom Method Form State
   const [newMethodName, setNewMethodName] = useState('');
-  const [newMethodType, setNewMethodType] = useState<'zelle' | 'binance' | 'bank_transfer' | 'custom'>('custom');
+  const [newMethodType, setNewMethodType] = useState<
+    'zelle' | 'binance' | 'bank_transfer' | 'custom'
+  >('custom');
   const [newMethodLogo, setNewMethodLogo] = useState('/logos/bank.svg');
   const [newMethodHolder, setNewMethodHolder] = useState('');
   const [newMethodEmail, setNewMethodEmail] = useState('');
@@ -265,7 +283,9 @@ export function ContractsDashboardClient({
 
     // Si la cuota tiene una fecha límite o descripción con fecha final "al YYYY-MM-DD", extraerla para extender vigencia
     let newExp = payment.due_date;
-    const match = (payment.description || '').match(/al\s+(\d{4}-\d{2}-\d{2})/) || (payment.notes || '').match(/al\s+(\d{4}-\d{2}-\d{2})/);
+    const match =
+      (payment.description || '').match(/al\s+(\d{4}-\d{2}-\d{2})/) ||
+      (payment.notes || '').match(/al\s+(\d{4}-\d{2}-\d{2})/);
     if (match) {
       newExp = match[1];
     }
@@ -308,7 +328,8 @@ export function ContractsDashboardClient({
     setRenewalPaymentMethod('Transferencia');
 
     // Determine start date from current expiration or start date
-    const currentExp = prop.service_expiration || prop.start_date || new Date().toISOString().split('T')[0];
+    const currentExp =
+      prop.service_expiration || prop.start_date || new Date().toISOString().split('T')[0];
     const startDate = currentExp.split('T')[0];
 
     // Determine cycle and amount from recurrent services if present
@@ -370,8 +391,8 @@ export function ContractsDashboardClient({
           renewalMarkAsPaid
             ? '¡Renovación y pago registrados con éxito! Vigencia extendida.'
             : renewalNotifyClient
-            ? 'Cuota de renovación generada y cliente notificado por correo'
-            : 'Cuota de renovación generada exitosamente'
+              ? 'Cuota de renovación generada y cliente notificado por correo'
+              : 'Cuota de renovación generada exitosamente'
         );
         setRenewalModalOpen(false);
         router.refresh();
@@ -467,7 +488,9 @@ export function ContractsDashboardClient({
   };
 
   const handleDeleteCategory = (id: string) => {
-    if (confirm('¿Eliminar esta categoría? Se eliminarán todos sus servicios y planes asociados.')) {
+    if (
+      confirm('¿Eliminar esta categoría? Se eliminarán todos sus servicios y planes asociados.')
+    ) {
       startTransition(async () => {
         try {
           await deleteCategory(id);
@@ -687,9 +710,7 @@ export function ContractsDashboardClient({
   // ==========================================
 
   const handleTogglePaymentMethod = async (id: string) => {
-    const updated = paymentMethods.map((m) =>
-      m.id === id ? { ...m, enabled: !m.enabled } : m
-    );
+    const updated = paymentMethods.map((m) => (m.id === id ? { ...m, enabled: !m.enabled } : m));
     setPaymentMethods(updated);
     try {
       await savePaymentMethods(updated);
@@ -801,6 +822,20 @@ export function ContractsDashboardClient({
   const totalPaid = proposals.filter((p) => p.payment_status === 'PAGADO').length;
   const totalPending = proposals.filter((p) => p.payment_status !== 'PAGADO').length;
 
+  // Filter proposals by search term
+  const filteredProposals = proposals.filter((p) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      p.client_company?.toLowerCase().includes(term) ||
+      p.client_name?.toLowerCase().includes(term) ||
+      p.client_domain?.toLowerCase().includes(term) ||
+      p.invoice_number?.toLowerCase().includes(term) ||
+      p.service_name?.toLowerCase().includes(term) ||
+      p.services?.some((s) => s.service_name?.toLowerCase().includes(term))
+    );
+  });
+
   return (
     <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8'>
       {/* Top Banner & Quick Action */}
@@ -814,27 +849,46 @@ export function ContractsDashboardClient({
             </span>
           </h1>
           <p className='text-sm text-muted-foreground mt-1'>
-            Control centralizado de propuestas comerciales, catálogo de servicios y ajustes corporativos
+            Control centralizado de propuestas comerciales, catálogo de servicios y ajustes
+            corporativos
           </p>
         </div>
 
-        <Link href='/dashboard/propuestas/crear'>
-          <Button className='bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-md cursor-pointer flex items-center gap-2'>
-            <Icons.add className='h-4 w-4' />
-            <span>Nueva Propuesta</span>
+        <div className='flex items-center gap-2.5 flex-wrap'>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={startDashboardTour}
+            className='cursor-pointer text-xs flex items-center gap-1.5 border-primary/40 bg-primary/5 text-primary hover:bg-primary/15 transition-all shadow-xs h-9'
+            title='Iniciar Tour Guiado del Historial de Contratos'
+          >
+            <Icons.help className='h-4 w-4' />
+            <span>Tour del Panel</span>
           </Button>
-        </Link>
+
+          <Link href='/dashboard/propuestas/crear'>
+            <Button
+              id='btn-create-proposal-main'
+              className='bg-primary text-primary-foreground hover:bg-primary/90 font-semibold shadow-md cursor-pointer flex items-center gap-2 h-9'
+            >
+              <Icons.add className='h-4 w-4' />
+              <span>Nueva Propuesta</span>
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* KPI Cards */}
-      <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
+      <div id='dashboard-kpi-summary' className='grid grid-cols-2 md:grid-cols-4 gap-4'>
         <Card className='p-4 border-border/60 bg-card/60 backdrop-blur-sm'>
           <p className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
             Total Propuestas
           </p>
           <div className='flex items-baseline justify-between mt-2'>
             <span className='text-2xl font-bold'>{proposals.length}</span>
-            <Badge variant='secondary' className='text-xs'>Activas</Badge>
+            <Badge variant='secondary' className='text-xs'>
+              Activas
+            </Badge>
           </div>
         </Card>
 
@@ -871,7 +925,7 @@ export function ContractsDashboardClient({
 
       {/* CENTERED NAVIGATION TABS */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className='w-full space-y-6'>
-        <div className='flex justify-center border-b border-border/40 pb-2'>
+        <div id='dashboard-tabs-nav' className='flex justify-center border-b border-border/40 pb-2'>
           <TabsList className='bg-muted/60 p-1 rounded-xl h-auto flex flex-wrap gap-1'>
             <TabsTrigger
               value='propuestas'
@@ -913,20 +967,62 @@ export function ContractsDashboardClient({
         {/* ======================================================== */}
         <TabsContent value='propuestas' className='space-y-4'>
           <Card className='border-border/60 bg-card/60 backdrop-blur-sm shadow-sm'>
-            <CardHeader className='flex flex-row items-center justify-between pb-4'>
+            <CardHeader className='flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4'>
               <div>
-                <CardTitle className='text-lg font-bold'>Historial de Propuestas & Contratos</CardTitle>
+                <CardTitle className='text-lg font-bold'>
+                  Historial de Propuestas & Contratos
+                </CardTitle>
                 <CardDescription>
                   Listado de contratos generados con estado de facturación, firma y accesos
                 </CardDescription>
+              </div>
+
+              {/* Buscador Rápido de Contratos */}
+              <div id='dashboard-search-bar' className='relative w-full sm:w-80'>
+                <Icons.search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
+                <Input
+                  placeholder='Buscar por cliente, dominio o factura...'
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className='pl-9 pr-7 h-9 text-xs bg-background/50 border-border/70 focus-visible:ring-primary/40'
+                />
+                {searchTerm && (
+                  <button
+                    type='button'
+                    onClick={() => setSearchTerm('')}
+                    className='absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs h-4 w-4 rounded-full flex items-center justify-center cursor-pointer'
+                    title='Limpiar búsqueda'
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
               {proposals.length === 0 ? (
                 <div className='text-center py-12 text-muted-foreground'>
                   <Icons.fileText className='mx-auto h-12 w-12 text-muted-foreground/40 mb-3' />
-                  <p className='font-semibold text-foreground text-base'>No hay propuestas registradas</p>
-                  <p className='text-sm mt-1'>Crea tu primera propuesta haciendo clic en "Nueva Propuesta"</p>
+                  <p className='font-semibold text-foreground text-base'>
+                    No hay propuestas registradas
+                  </p>
+                  <p className='text-sm mt-1'>
+                    Crea tu primera propuesta haciendo clic en "Nueva Propuesta"
+                  </p>
+                </div>
+              ) : filteredProposals.length === 0 ? (
+                <div className='text-center py-12 text-muted-foreground'>
+                  <Icons.search className='mx-auto h-10 w-10 text-muted-foreground/40 mb-2' />
+                  <p className='font-semibold text-foreground text-base'>
+                    No se encontraron contratos para "{searchTerm}"
+                  </p>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    onClick={() => setSearchTerm('')}
+                    className='mt-2 text-xs text-primary cursor-pointer'
+                  >
+                    Limpiar búsqueda
+                  </Button>
                 </div>
               ) : (
                 <div className='overflow-x-auto rounded-lg border border-border/40'>
@@ -934,18 +1030,27 @@ export function ContractsDashboardClient({
                     <TableHeader className='bg-muted/40'>
                       <TableRow>
                         <TableHead className='font-semibold'>Cliente / Empresa</TableHead>
-                        <TableHead className='font-semibold'>Servicios Contratados</TableHead>
+                        <TableHead id='contracts-table-header-type' className='font-semibold'>
+                          Servicios Contratados
+                        </TableHead>
                         <TableHead className='font-semibold'>Inversión</TableHead>
-                        <TableHead className='font-semibold'>Estado Pago</TableHead>
+                        <TableHead id='contracts-table-header-status' className='font-semibold'>
+                          Estado Pago
+                        </TableHead>
                         <TableHead className='font-semibold'>Firma Digital</TableHead>
                         <TableHead className='font-semibold'>Fecha</TableHead>
-                        <TableHead className='text-right font-semibold'>Acciones</TableHead>
+                        <TableHead id='actions-column-tour' className='text-right font-semibold'>
+                          Acciones
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {proposals.map((prop) => {
+                      {filteredProposals.map((prop, idx) => {
                         const totalAmount =
-                          prop.services?.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0) ||
+                          prop.services?.reduce(
+                            (acc, curr) => acc + (Number(curr.price) || 0),
+                            0
+                          ) ||
                           prop.price ||
                           0;
                         const servicesList =
@@ -959,7 +1064,9 @@ export function ContractsDashboardClient({
 
                         const hasRecurrent =
                           prop.services?.some((s) => s.billing_type === 'RECURRENT') ||
-                          (prop.duration && prop.duration !== 'Pago Único' && prop.duration !== 'Un único pago');
+                          (prop.duration &&
+                            prop.duration !== 'Pago Único' &&
+                            prop.duration !== 'Un único pago');
                         const hasOneTime =
                           prop.services?.some((s) => s.billing_type === 'ONE_TIME') ||
                           prop.duration === 'Pago Único' ||
@@ -990,7 +1097,9 @@ export function ContractsDashboardClient({
                                 {prop.client_domain ? (
                                   <>
                                     <span>•</span>
-                                    <span className='text-primary font-mono'>{prop.client_domain}</span>
+                                    <span className='text-primary font-mono'>
+                                      {prop.client_domain}
+                                    </span>
                                   </>
                                 ) : null}
                               </div>
@@ -1022,7 +1131,8 @@ export function ContractsDashboardClient({
                                 <div className='text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5'>
                                   <Icons.calendar className='h-3 w-3 text-purple-400 shrink-0' />
                                   <span>
-                                    Próx. Renovación: <strong>{prop.service_expiration.split('T')[0]}</strong>
+                                    Próx. Renovación:{' '}
+                                    <strong>{prop.service_expiration.split('T')[0]}</strong>
                                   </span>
                                 </div>
                               ) : null}
@@ -1078,7 +1188,10 @@ export function ContractsDashboardClient({
                             </TableCell>
 
                             <TableCell className='text-right'>
-                              <div className='flex items-center justify-end gap-1'>
+                              <div
+                                id={idx === 0 ? 'first-row-actions' : undefined}
+                                className='flex items-center justify-end gap-1'
+                              >
                                 {/* Enlace público */}
                                 <a
                                   href={`/p/${prop.id}`}
@@ -1086,7 +1199,11 @@ export function ContractsDashboardClient({
                                   rel='noreferrer'
                                   title='Abrir portal interactivo del cliente'
                                 >
-                                  <Button variant='ghost' size='sm' className='h-8 w-8 p-0 cursor-pointer text-muted-foreground hover:text-foreground'>
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    className='h-8 w-8 p-0 cursor-pointer text-muted-foreground hover:text-foreground'
+                                  >
                                     <Icons.externalLink className='h-4 w-4' />
                                   </Button>
                                 </a>
@@ -1190,7 +1307,8 @@ export function ContractsDashboardClient({
               <div>
                 <CardTitle className='text-lg font-bold'>Categorías del Catálogo</CardTitle>
                 <CardDescription>
-                  Organiza tus líneas de negocio y define las políticas legales asociadas a cada categoría
+                  Organiza tus líneas de negocio y define las políticas legales asociadas a cada
+                  categoría
                 </CardDescription>
               </div>
               <Button
@@ -1205,7 +1323,10 @@ export function ContractsDashboardClient({
             <CardContent>
               <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
                 {catalog.map((cat) => (
-                  <Card key={cat.id} className='border-border/60 bg-background/50 flex flex-col justify-between'>
+                  <Card
+                    key={cat.id}
+                    className='border-border/60 bg-background/50 flex flex-col justify-between'
+                  >
                     <CardHeader className='pb-3'>
                       <div className='flex items-start justify-between'>
                         <CardTitle className='text-base font-bold text-foreground'>
@@ -1259,7 +1380,8 @@ export function ContractsDashboardClient({
             <div>
               <h3 className='text-lg font-bold'>Catálogo de Servicios & Planes de Precios</h3>
               <p className='text-xs text-muted-foreground'>
-                Administra los precios, características y vigencias de cada servicio para propuestas dinámicas
+                Administra los precios, características y vigencias de cada servicio para propuestas
+                dinámicas
               </p>
             </div>
             <div className='flex gap-2'>
@@ -1291,12 +1413,17 @@ export function ContractsDashboardClient({
                   <h4 className='font-bold text-sm tracking-wide uppercase text-foreground'>
                     {cat.name}
                   </h4>
-                  <span className='text-xs text-muted-foreground'>({cat.services?.length || 0})</span>
+                  <span className='text-xs text-muted-foreground'>
+                    ({cat.services?.length || 0})
+                  </span>
                 </div>
 
                 <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
                   {cat.services?.map((srv) => (
-                    <Card key={srv.id} className='border-border/60 bg-card/60 flex flex-col justify-between'>
+                    <Card
+                      key={srv.id}
+                      className='border-border/60 bg-card/60 flex flex-col justify-between'
+                    >
                       <CardHeader className='pb-3'>
                         <div className='flex items-start justify-between'>
                           <div>
@@ -1399,7 +1526,8 @@ export function ContractsDashboardClient({
                     Identidad Visual & Marca Blanca
                   </CardTitle>
                   <CardDescription>
-                    Personaliza el nombre, logo y colores que verán tus clientes en los contratos digitales
+                    Personaliza el nombre, logo y colores que verán tus clientes en los contratos
+                    digitales
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='space-y-4'>
@@ -1422,7 +1550,11 @@ export function ContractsDashboardClient({
                         type='button'
                         variant='ghost'
                         size='xs'
-                        onClick={() => setBrandLogo('https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg')}
+                        onClick={() =>
+                          setBrandLogo(
+                            'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg'
+                          )
+                        }
                         className='text-[11px] text-blue-500 hover:text-blue-600 cursor-pointer'
                       >
                         Restablecer al Oficial SVG
@@ -1513,7 +1645,11 @@ export function ContractsDashboardClient({
                   >
                     <div className='flex items-center gap-3'>
                       {brandLogo ? (
-                        <img src={brandLogo} alt='Logo Preview' className='h-8 w-8 object-contain' />
+                        <img
+                          src={brandLogo}
+                          alt='Logo Preview'
+                          className='h-8 w-8 object-contain'
+                        />
                       ) : null}
                       <span className='font-bold text-sm'>{brandName}</span>
                     </div>
@@ -1536,7 +1672,8 @@ export function ContractsDashboardClient({
                     Servidor de Correo (SMTP)
                   </CardTitle>
                   <CardDescription>
-                    Configura tus credenciales SMTP para enviar las propuestas directamente al cliente
+                    Configura tus credenciales SMTP para enviar las propuestas directamente al
+                    cliente
                   </CardDescription>
                 </CardHeader>
                 <CardContent className='space-y-4'>
@@ -1628,7 +1765,8 @@ export function ContractsDashboardClient({
                 <span>Canales y Cuentas de Cobro</span>
               </h2>
               <p className='text-xs text-muted-foreground mt-1'>
-                Configura los métodos de pago (Zelle, Binance Pay, cuentas bancarias o personalizados) que tus clientes verán para pagar sus contratos.
+                Configura los métodos de pago (Zelle, Binance Pay, cuentas bancarias o
+                personalizados) que tus clientes verán para pagar sus contratos.
               </p>
             </div>
             <Button
@@ -1665,9 +1803,17 @@ export function ContractsDashboardClient({
                         />
                       </div>
                       <div>
-                        <CardTitle className='text-base font-bold text-foreground'>{pm.name}</CardTitle>
+                        <CardTitle className='text-base font-bold text-foreground'>
+                          {pm.name}
+                        </CardTitle>
                         <span className='text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-primary/10 text-primary mt-1 inline-block'>
-                          {pm.type === 'zelle' ? 'Zelle USA' : pm.type === 'binance' ? 'Binance Pay / Cripto' : pm.type === 'bank_transfer' ? 'Banca Tradicional' : 'Personalizado'}
+                          {pm.type === 'zelle'
+                            ? 'Zelle USA'
+                            : pm.type === 'binance'
+                              ? 'Binance Pay / Cripto'
+                              : pm.type === 'bank_transfer'
+                                ? 'Banca Tradicional'
+                                : 'Personalizado'}
                         </span>
                       </div>
                     </div>
@@ -1686,13 +1832,17 @@ export function ContractsDashboardClient({
                     {pm.account_email && (
                       <div className='flex justify-between gap-2'>
                         <span className='text-foreground/70'>Correo:</span>
-                        <span className='font-mono font-medium text-foreground truncate max-w-[170px]'>{pm.account_email}</span>
+                        <span className='font-mono font-medium text-foreground truncate max-w-[170px]'>
+                          {pm.account_email}
+                        </span>
                       </div>
                     )}
                     {pm.account_holder && (
                       <div className='flex justify-between gap-2'>
                         <span className='text-foreground/70'>Titular:</span>
-                        <span className='font-medium text-foreground truncate max-w-[170px]'>{pm.account_holder}</span>
+                        <span className='font-medium text-foreground truncate max-w-[170px]'>
+                          {pm.account_holder}
+                        </span>
                       </div>
                     )}
                     {pm.binance_id && (
@@ -1724,7 +1874,9 @@ export function ContractsDashboardClient({
                     {pm.account_number && (
                       <div className='flex justify-between gap-2'>
                         <span className='text-foreground/70'>Cuenta:</span>
-                        <span className='font-mono font-medium text-foreground truncate max-w-[160px]'>{pm.account_number}</span>
+                        <span className='font-mono font-medium text-foreground truncate max-w-[160px]'>
+                          {pm.account_number}
+                        </span>
                       </div>
                     )}
                     {pm.routing_number && (
@@ -1783,7 +1935,8 @@ export function ContractsDashboardClient({
           <DialogHeader>
             <DialogTitle>Registrar Pago / Abono</DialogTitle>
             <DialogDescription>
-              {selectedProposalForPayment?.client_company} — #{selectedProposalForPayment?.invoice_number}
+              {selectedProposalForPayment?.client_company} — #
+              {selectedProposalForPayment?.invoice_number}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleRegisterPaymentSubmit} className='space-y-4 py-2'>
@@ -1802,7 +1955,10 @@ export function ContractsDashboardClient({
             <div className='grid grid-cols-2 gap-4'>
               <div className='space-y-2'>
                 <Label>Método de Pago</Label>
-                <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val || 'Transferencia')}>
+                <Select
+                  value={paymentMethod}
+                  onValueChange={(val) => setPaymentMethod(val || 'Transferencia')}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -1847,7 +2003,8 @@ export function ContractsDashboardClient({
                   onChange={(e) => setPaymentNewExpirationDate(e.target.value)}
                 />
                 <p className='text-[10px] text-muted-foreground'>
-                  Al confirmar el pago, la vigencia del contrato se actualizará automáticamente a esta fecha.
+                  Al confirmar el pago, la vigencia del contrato se actualizará automáticamente a
+                  esta fecha.
                 </p>
               </div>
             ) : null}
@@ -1856,7 +2013,10 @@ export function ContractsDashboardClient({
               <Button type='button' variant='outline' onClick={() => setPaymentModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button type='submit' className='bg-emerald-600 hover:bg-emerald-500 text-white font-medium'>
+              <Button
+                type='submit'
+                className='bg-emerald-600 hover:bg-emerald-500 text-white font-medium'
+              >
                 Confirmar Pago
               </Button>
             </DialogFooter>
@@ -1879,7 +2039,8 @@ export function ContractsDashboardClient({
               ) : null}
             </DialogTitle>
             <DialogDescription>
-              {detailedProposal?.proposal?.client_company} — {detailedProposal?.proposal?.client_name}
+              {detailedProposal?.proposal?.client_company} —{' '}
+              {detailedProposal?.proposal?.client_name}
             </DialogDescription>
           </DialogHeader>
 
@@ -1900,7 +2061,8 @@ export function ContractsDashboardClient({
                       <div>
                         <div className='font-semibold'>{srv.service_name}</div>
                         <div className='text-xs text-muted-foreground'>
-                          {srv.category_name} • Plan: {srv.plan_name} • Ciclo: {srv.billing_cycle || 'Anual'}
+                          {srv.category_name} • Plan: {srv.plan_name} • Ciclo:{' '}
+                          {srv.billing_cycle || 'Anual'}
                         </div>
                       </div>
                       <div className='font-bold text-sm'>${srv.price} USD</div>
@@ -1931,7 +2093,9 @@ export function ContractsDashboardClient({
                             <span className='font-semibold'>{pm.description || 'Cuota'}</span>
                             <span className='text-muted-foreground ml-2'>
                               {isPending
-                                ? (pm.due_date ? `Vence: ${pm.due_date}` : 'Pendiente de pago')
+                                ? pm.due_date
+                                  ? `Vence: ${pm.due_date}`
+                                  : 'Pendiente de pago'
                                 : `${pm.payment_date} (${pm.payment_method})`}
                             </span>
                           </div>
@@ -1982,8 +2146,12 @@ export function ContractsDashboardClient({
                     {detailedProposal.credentials.map((cr, idx) => (
                       <div key={idx} className='p-3 text-xs space-y-1 bg-muted/20'>
                         <div className='font-bold text-foreground'>{cr.description}</div>
-                        <div className='text-muted-foreground'>Usuario: <span className='font-mono text-foreground'>{cr.email}</span></div>
-                        <div className='text-muted-foreground'>Clave: <span className='font-mono text-foreground'>{cr.password}</span></div>
+                        <div className='text-muted-foreground'>
+                          Usuario: <span className='font-mono text-foreground'>{cr.email}</span>
+                        </div>
+                        <div className='text-muted-foreground'>
+                          Clave: <span className='font-mono text-foreground'>{cr.password}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1998,7 +2166,8 @@ export function ContractsDashboardClient({
                   </h4>
                   <div className='p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between'>
                     <div className='text-xs text-emerald-600 dark:text-emerald-400'>
-                      Firmado legalmente el {detailedProposal.proposal.signature_date?.split('T')[0]}
+                      Firmado legalmente el{' '}
+                      {detailedProposal.proposal.signature_date?.split('T')[0]}
                     </div>
                     <img
                       src={detailedProposal.proposal.signature_image}
@@ -2049,8 +2218,8 @@ export function ContractsDashboardClient({
                 {isSendingProposal
                   ? 'Enviando...'
                   : selectedProposalForEmail?.signature_image
-                  ? 'Enviar Acceso al Portal'
-                  : 'Enviar Propuesta'}
+                    ? 'Enviar Acceso al Portal'
+                    : 'Enviar Propuesta'}
               </Button>
             </DialogFooter>
           </form>
@@ -2068,7 +2237,8 @@ export function ContractsDashboardClient({
               <span>Renovar Periodo de Servicio</span>
             </DialogTitle>
             <DialogDescription>
-              Genera la cuota de cobro para el siguiente ciclo recurrente de {selectedProposalForRenewal?.client_company}.
+              Genera la cuota de cobro para el siguiente ciclo recurrente de{' '}
+              {selectedProposalForRenewal?.client_company}.
             </DialogDescription>
           </DialogHeader>
 
@@ -2085,7 +2255,9 @@ export function ContractsDashboardClient({
               <div className='flex justify-between'>
                 <span className='text-muted-foreground'>Vigencia Actual:</span>
                 <span className='font-mono font-medium text-amber-500'>
-                  {selectedProposalForRenewal?.service_expiration?.split('T')[0] || selectedProposalForRenewal?.start_date?.split('T')[0] || 'No definida'}
+                  {selectedProposalForRenewal?.service_expiration?.split('T')[0] ||
+                    selectedProposalForRenewal?.start_date?.split('T')[0] ||
+                    'No definida'}
                 </span>
               </div>
             </div>
@@ -2163,7 +2335,8 @@ export function ContractsDashboardClient({
                     ¿Registrar pago de esta renovación ahora mismo?
                   </Label>
                   <p className='text-[11px] text-muted-foreground'>
-                    Márcalo como pagado para extender la vigencia de inmediato sin dejar cuotas pendientes.
+                    Márcalo como pagado para extender la vigencia de inmediato sin dejar cuotas
+                    pendientes.
                   </p>
                 </div>
                 <Switch
@@ -2176,7 +2349,10 @@ export function ContractsDashboardClient({
               {renewalMarkAsPaid && (
                 <div className='space-y-1.5 pt-2 border-t border-border/40'>
                   <Label className='text-xs'>Método de Pago Recibido</Label>
-                  <Select value={renewalPaymentMethod} onValueChange={(val) => setRenewalPaymentMethod(val || 'Transferencia')}>
+                  <Select
+                    value={renewalPaymentMethod}
+                    onValueChange={(val) => setRenewalPaymentMethod(val || 'Transferencia')}
+                  >
                     <SelectTrigger className='h-8 text-xs'>
                       <SelectValue />
                     </SelectTrigger>
@@ -2219,8 +2395,8 @@ export function ContractsDashboardClient({
                 {isSubmittingRenewal
                   ? 'Procesando...'
                   : renewalMarkAsPaid
-                  ? 'Confirmar Renovación y Pago'
-                  : 'Generar Cuota de Renovación'}
+                    ? 'Confirmar Renovación y Pago'
+                    : 'Generar Cuota de Renovación'}
               </Button>
             </DialogFooter>
           </form>
@@ -2408,11 +2584,13 @@ export function ContractsDashboardClient({
                   <SelectValue placeholder='Selecciona el servicio' />
                 </SelectTrigger>
                 <SelectContent>
-                  {catalog.flatMap((c) => c.services || []).map((srv) => (
-                    <SelectItem key={srv.id} value={srv.id}>
-                      {srv.name}
-                    </SelectItem>
-                  ))}
+                  {catalog
+                    .flatMap((c) => c.services || [])
+                    .map((srv) => (
+                      <SelectItem key={srv.id} value={srv.id}>
+                        {srv.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -2552,7 +2730,9 @@ export function ContractsDashboardClient({
                 <Input
                   required
                   value={selectedMethodForEdit.name}
-                  onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, name: e.target.value })}
+                  onChange={(e) =>
+                    setSelectedMethodForEdit({ ...selectedMethodForEdit, name: e.target.value })
+                  }
                 />
               </div>
 
@@ -2565,7 +2745,12 @@ export function ContractsDashboardClient({
                       type='button'
                       variant='ghost'
                       size='xs'
-                      onClick={() => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: '/logos/zelle.svg' })}
+                      onClick={() =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          logo_url: '/logos/zelle.svg'
+                        })
+                      }
                       className='text-[10px] px-1.5 py-0.5 h-6'
                     >
                       Zelle
@@ -2574,7 +2759,12 @@ export function ContractsDashboardClient({
                       type='button'
                       variant='ghost'
                       size='xs'
-                      onClick={() => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: '/logos/binance.svg' })}
+                      onClick={() =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          logo_url: '/logos/binance.svg'
+                        })
+                      }
                       className='text-[10px] px-1.5 py-0.5 h-6'
                     >
                       Binance
@@ -2583,7 +2773,12 @@ export function ContractsDashboardClient({
                       type='button'
                       variant='ghost'
                       size='xs'
-                      onClick={() => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: '/logos/bank.svg' })}
+                      onClick={() =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          logo_url: '/logos/bank.svg'
+                        })
+                      }
                       className='text-[10px] px-1.5 py-0.5 h-6'
                     >
                       Banco
@@ -2612,7 +2807,12 @@ export function ContractsDashboardClient({
                     />
                     <Input
                       value={selectedMethodForEdit.logo_url}
-                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, logo_url: e.target.value })}
+                      onChange={(e) =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          logo_url: e.target.value
+                        })
+                      }
                       placeholder='O pega la URL del logo...'
                       className='text-xs font-mono text-muted-foreground'
                     />
@@ -2629,7 +2829,12 @@ export function ContractsDashboardClient({
                       type='email'
                       required
                       value={selectedMethodForEdit.account_email || ''}
-                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_email: e.target.value })}
+                      onChange={(e) =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          account_email: e.target.value
+                        })
+                      }
                       placeholder='pagos@tuempresa.com'
                     />
                   </div>
@@ -2638,7 +2843,12 @@ export function ContractsDashboardClient({
                     <Input
                       required
                       value={selectedMethodForEdit.account_holder || ''}
-                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_holder: e.target.value })}
+                      onChange={(e) =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          account_holder: e.target.value
+                        })
+                      }
                       placeholder='Nombre o Razón Social'
                     />
                   </div>
@@ -2651,7 +2861,12 @@ export function ContractsDashboardClient({
                     <Label>Binance Pay ID / UID</Label>
                     <Input
                       value={selectedMethodForEdit.binance_id || ''}
-                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, binance_id: e.target.value })}
+                      onChange={(e) =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          binance_id: e.target.value
+                        })
+                      }
                       placeholder='Ej: 84920193'
                     />
                   </div>
@@ -2659,7 +2874,12 @@ export function ContractsDashboardClient({
                     <Label>Red Cripto (Ej: USDT TRC-20, BEP-20)</Label>
                     <Input
                       value={selectedMethodForEdit.network || ''}
-                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, network: e.target.value })}
+                      onChange={(e) =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          network: e.target.value
+                        })
+                      }
                       placeholder='USDT (Red TRC-20)'
                     />
                   </div>
@@ -2667,7 +2887,12 @@ export function ContractsDashboardClient({
                     <Label>Dirección de Billetera (Wallet)</Label>
                     <Input
                       value={selectedMethodForEdit.wallet_address || ''}
-                      onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, wallet_address: e.target.value })}
+                      onChange={(e) =>
+                        setSelectedMethodForEdit({
+                          ...selectedMethodForEdit,
+                          wallet_address: e.target.value
+                        })
+                      }
                       placeholder='TXyz1234567890...'
                       className='font-mono text-xs'
                     />
@@ -2675,14 +2900,20 @@ export function ContractsDashboardClient({
                 </div>
               )}
 
-              {(selectedMethodForEdit.type === 'bank_transfer' || selectedMethodForEdit.type === 'custom') && (
+              {(selectedMethodForEdit.type === 'bank_transfer' ||
+                selectedMethodForEdit.type === 'custom') && (
                 <div className='space-y-3'>
                   <div className='grid grid-cols-2 gap-3'>
                     <div className='space-y-2'>
                       <Label>Banco / Plataforma</Label>
                       <Input
                         value={selectedMethodForEdit.bank_name || ''}
-                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, bank_name: e.target.value })}
+                        onChange={(e) =>
+                          setSelectedMethodForEdit({
+                            ...selectedMethodForEdit,
+                            bank_name: e.target.value
+                          })
+                        }
                         placeholder='Ej: Chase / Mercantil / PayPal'
                       />
                     </div>
@@ -2690,7 +2921,12 @@ export function ContractsDashboardClient({
                       <Label>Titular de la Cuenta</Label>
                       <Input
                         value={selectedMethodForEdit.account_holder || ''}
-                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_holder: e.target.value })}
+                        onChange={(e) =>
+                          setSelectedMethodForEdit({
+                            ...selectedMethodForEdit,
+                            account_holder: e.target.value
+                          })
+                        }
                         placeholder='Nombre o Empresa'
                       />
                     </div>
@@ -2700,7 +2936,12 @@ export function ContractsDashboardClient({
                       <Label>Número de Cuenta / Teléfono</Label>
                       <Input
                         value={selectedMethodForEdit.account_number || ''}
-                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, account_number: e.target.value })}
+                        onChange={(e) =>
+                          setSelectedMethodForEdit({
+                            ...selectedMethodForEdit,
+                            account_number: e.target.value
+                          })
+                        }
                         placeholder='0134-0000-...'
                       />
                     </div>
@@ -2708,7 +2949,12 @@ export function ContractsDashboardClient({
                       <Label>Documento / RIF / Routing</Label>
                       <Input
                         value={selectedMethodForEdit.routing_number || ''}
-                        onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, routing_number: e.target.value })}
+                        onChange={(e) =>
+                          setSelectedMethodForEdit({
+                            ...selectedMethodForEdit,
+                            routing_number: e.target.value
+                          })
+                        }
                         placeholder='J-12345678-0 o ABA Routing'
                       />
                     </div>
@@ -2721,13 +2967,22 @@ export function ContractsDashboardClient({
                 <Textarea
                   rows={2}
                   value={selectedMethodForEdit.instructions || ''}
-                  onChange={(e) => setSelectedMethodForEdit({ ...selectedMethodForEdit, instructions: e.target.value })}
+                  onChange={(e) =>
+                    setSelectedMethodForEdit({
+                      ...selectedMethodForEdit,
+                      instructions: e.target.value
+                    })
+                  }
                   placeholder='Ej: Indicar número de factura y enviar captura de pago a facturacion@empresa.com'
                 />
               </div>
 
               <DialogFooter className='pt-2'>
-                <Button type='button' variant='outline' onClick={() => setEditMethodModalOpen(false)}>
+                <Button
+                  type='button'
+                  variant='outline'
+                  onClick={() => setEditMethodModalOpen(false)}
+                >
                   Cancelar
                 </Button>
                 <Button type='submit' className='bg-primary font-bold'>
@@ -2767,10 +3022,7 @@ export function ContractsDashboardClient({
               </div>
               <div className='space-y-2'>
                 <Label>Tipo de Canal</Label>
-                <Select
-                  value={newMethodType}
-                  onValueChange={(val: any) => setNewMethodType(val)}
-                >
+                <Select value={newMethodType} onValueChange={(val: any) => setNewMethodType(val)}>
                   <SelectTrigger className='w-full'>
                     <SelectValue />
                   </SelectTrigger>
@@ -2907,7 +3159,11 @@ export function ContractsDashboardClient({
             </div>
 
             <DialogFooter className='pt-2'>
-              <Button type='button' variant='outline' onClick={() => setCreateMethodModalOpen(false)}>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setCreateMethodModalOpen(false)}
+              >
                 Cancelar
               </Button>
               <Button type='submit' className='bg-primary font-bold'>
