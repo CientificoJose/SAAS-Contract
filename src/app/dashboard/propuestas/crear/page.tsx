@@ -162,9 +162,7 @@ export default function CrearPropuestaPage() {
   ]);
 
   // Credenciales
-  const [credentials, setCredentials] = useState<Credential[]>([
-    { description: 'Panel de Administración', email: '', password: '', notes: '' }
-  ]);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
 
   // Colaboradores
   const [collaborators, setCollaborators] = useState<ProposalCollaborator[]>([]);
@@ -253,12 +251,14 @@ export default function CrearPropuestaPage() {
     deliveryDate.setDate(deliveryDate.getDate() + 15);
     const deliveryDateISO = deliveryDate.toISOString().split('T')[0];
 
+    const initialStatus = paymentStatus === 'PAGADO' ? 'PAGADO' : 'PENDIENTE';
+
     if (scheduleType === 'full') {
       setPayments([
         {
           description: 'Pago Total Inicial / Contrato',
           amount: totalPrice,
-          status: 'PENDIENTE',
+          status: initialStatus,
           payment_date: todayISO,
           payment_method: paymentMethod || 'Transferencia',
           due_date: todayISO
@@ -271,7 +271,7 @@ export default function CrearPropuestaPage() {
         {
           description: 'Cuota 1: Anticipo de Inicio (50%)',
           amount: half,
-          status: 'PENDIENTE',
+          status: paymentStatus === 'PAGADO' || paymentStatus === 'PARCIAL' ? 'PAGADO' : 'PENDIENTE',
           payment_date: todayISO,
           payment_method: paymentMethod || 'Transferencia',
           due_date: todayISO
@@ -279,14 +279,14 @@ export default function CrearPropuestaPage() {
         {
           description: 'Cuota 2: Contra Entrega Final (50%)',
           amount: rest,
-          status: 'PENDIENTE',
-          payment_date: '',
+          status: paymentStatus === 'PAGADO' ? 'PAGADO' : 'PENDIENTE',
+          payment_date: paymentStatus === 'PAGADO' ? todayISO : '',
           payment_method: paymentMethod || 'Transferencia',
           due_date: deliveryDateISO
         }
       ]);
     }
-  }, [totalPrice, scheduleType, paymentMethod]);
+  }, [totalPrice, scheduleType, paymentMethod, paymentStatus]);
 
   // Handlers para Servicios
   const handleAddService = () => {
@@ -511,7 +511,18 @@ export default function CrearPropuestaPage() {
       domain_expiration: s.domain_expiration
     }));
 
-    const validCredentials = credentials.filter((c) => c.description.trim() || c.email.trim());
+    const validCredentials = credentials.filter(
+      (c) => c.description.trim() && (c.email?.trim() || c.password?.trim() || c.notes?.trim())
+    );
+
+    const initialAmount =
+      paymentStatus === 'PAGADO'
+        ? totalPrice
+        : paymentStatus === 'PARCIAL'
+        ? scheduleType === '50_50'
+          ? Math.round((totalPrice / 2) * 100) / 100
+          : 0
+        : 0;
 
     startTransition(async () => {
       try {
@@ -525,7 +536,7 @@ export default function CrearPropuestaPage() {
           payment_status: paymentStatus,
           payment_date: paymentDate,
           payment_method: paymentMethod,
-          payment_amount: paymentStatus === 'PAGADO' ? totalPrice : 0,
+          payment_amount: initialAmount,
           brand_color_primary: brandColorPrimary,
           brand_color_secondary: brandColorSecondary,
           brand_logo_url: brandLogoUrl,
@@ -1278,62 +1289,80 @@ export default function CrearPropuestaPage() {
             </Button>
           </CardHeader>
           <CardContent className='space-y-3'>
-            {credentials.map((cred, idx) => (
-              <div
-                key={idx}
-                className='grid grid-cols-1 sm:grid-cols-4 gap-3 p-3 rounded-lg border border-border/40 bg-background/40 items-center'
-              >
-                <div className='space-y-1'>
-                  <Label className='text-[11px]'>Servicio / Acceso</Label>
-                  <Input
-                    placeholder='Ej: WordPress Admin / CPanel'
-                    value={cred.description}
-                    onChange={(e) => handleCredentialChange(idx, 'description', e.target.value)}
-                    className='text-xs h-8'
-                  />
-                </div>
-                <div className='space-y-1'>
-                  <Label className='text-[11px]'>Usuario / Correo</Label>
-                  <Input
-                    placeholder='admin@empresa.com'
-                    value={cred.email}
-                    onChange={(e) => handleCredentialChange(idx, 'email', e.target.value)}
-                    className='text-xs h-8'
-                  />
-                </div>
-                <div className='space-y-1'>
-                  <Label className='text-[11px]'>Contraseña</Label>
-                  <Input
-                    placeholder='••••••••'
-                    value={cred.password}
-                    onChange={(e) => handleCredentialChange(idx, 'password', e.target.value)}
-                    className='text-xs h-8 font-mono'
-                  />
-                </div>
-                <div className='flex items-end justify-between gap-2 pt-2 sm:pt-0'>
-                  <div className='flex-1 space-y-1'>
-                    <Label className='text-[11px]'>Notas</Label>
+            {credentials.length === 0 ? (
+              <div className='p-6 text-center border border-dashed border-border/60 rounded-lg bg-muted/10'>
+                <Icons.lock className='h-8 w-8 mx-auto text-muted-foreground/40 mb-2' />
+                <p className='text-xs text-muted-foreground max-w-sm mx-auto'>
+                  No hay credenciales añadidas aún. Si este proyecto requiere accesos confidenciales para el cliente (CPanel, CMS, etc.), puedes agregarlos aquí.
+                </p>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={handleAddCredential}
+                  className='mt-3 text-xs cursor-pointer'
+                >
+                  <Icons.add className='h-3.5 w-3.5 mr-1' />
+                  Añadir Primer Acceso
+                </Button>
+              </div>
+            ) : (
+              credentials.map((cred, idx) => (
+                <div
+                  key={idx}
+                  className='grid grid-cols-1 sm:grid-cols-4 gap-3 p-3 rounded-lg border border-border/40 bg-background/40 items-center'
+                >
+                  <div className='space-y-1'>
+                    <Label className='text-[11px]'>Servicio / Acceso</Label>
                     <Input
-                      placeholder='URL de acceso u observaciones'
-                      value={cred.notes || ''}
-                      onChange={(e) => handleCredentialChange(idx, 'notes', e.target.value)}
+                      placeholder='Ej: WordPress Admin / CPanel'
+                      value={cred.description}
+                      onChange={(e) => handleCredentialChange(idx, 'description', e.target.value)}
                       className='text-xs h-8'
                     />
                   </div>
-                  {credentials.length > 1 ? (
+                  <div className='space-y-1'>
+                    <Label className='text-[11px]'>Usuario / Correo</Label>
+                    <Input
+                      placeholder='admin@empresa.com'
+                      value={cred.email}
+                      onChange={(e) => handleCredentialChange(idx, 'email', e.target.value)}
+                      className='text-xs h-8'
+                    />
+                  </div>
+                  <div className='space-y-1'>
+                    <Label className='text-[11px]'>Contraseña</Label>
+                    <Input
+                      placeholder='••••••••'
+                      value={cred.password}
+                      onChange={(e) => handleCredentialChange(idx, 'password', e.target.value)}
+                      className='text-xs h-8 font-mono'
+                    />
+                  </div>
+                  <div className='flex items-end justify-between gap-2 pt-2 sm:pt-0'>
+                    <div className='flex-1 space-y-1'>
+                      <Label className='text-[11px]'>Notas</Label>
+                      <Input
+                        placeholder='URL de acceso u observaciones'
+                        value={cred.notes || ''}
+                        onChange={(e) => handleCredentialChange(idx, 'notes', e.target.value)}
+                        className='text-xs h-8'
+                      />
+                    </div>
                     <Button
                       type='button'
                       variant='ghost'
                       size='sm'
                       onClick={() => handleRemoveCredential(idx)}
                       className='h-8 w-8 p-0 text-destructive hover:text-destructive cursor-pointer'
+                      title='Eliminar acceso'
                     >
                       <Icons.trash className='h-3.5 w-3.5' />
                     </Button>
-                  ) : null}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 

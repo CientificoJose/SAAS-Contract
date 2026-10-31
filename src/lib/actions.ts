@@ -422,10 +422,12 @@ export async function createProposal(data: {
         proposal_id: proposalId,
         invoice_number: pm.invoice_number || data.invoice_number,
         amount: Number(pm.amount) || 0,
-        payment_date: pm.payment_date || '',
+        payment_date: pm.payment_date || (data.payment_status === 'PAGADO' ? data.payment_date : ''),
         payment_method: pm.payment_method || data.payment_method || 'Transferencia',
         description: pm.description || `Cuota #${idx + 1}`,
-        status: pm.status || 'PENDIENTE',
+        status: data.payment_status === 'PAGADO' && (!pm.status || pm.status === 'PENDIENTE') && (data.payments?.length === 1)
+          ? 'PAGADO'
+          : (pm.status || 'PENDIENTE'),
         notes: pm.notes || '',
         due_date: pm.due_date || ''
       }));
@@ -571,6 +573,8 @@ export async function generateRenewalPeriod(data: {
   description?: string;
   notify_client?: boolean;
   client_email?: string;
+  mark_as_paid?: boolean;
+  payment_method?: string;
 }): Promise<{ success: boolean; error?: string; payment_id?: string }> {
   try {
     const { data: proposal, error: pErr } = await supabaseAdmin
@@ -591,16 +595,18 @@ export async function generateRenewalPeriod(data: {
     const receiptSuffix = (count || 0) + 1;
     const paymentId = `pay-renov-${Date.now()}`;
     const desc = data.description || `Renovación de Servicio: ${data.start_date} al ${data.end_date}`;
+    const isPaid = !!data.mark_as_paid;
+    const todayISO = new Date().toISOString().split('T')[0];
 
     const { error: insErr } = await supabaseAdmin.from('proposal_payments').insert({
       id: paymentId,
       proposal_id: data.proposal_id,
       invoice_number: `${proposal.invoice_number}-R${receiptSuffix}`,
       amount: data.amount,
-      payment_date: null,
-      payment_method: '',
+      payment_date: isPaid ? todayISO : null,
+      payment_method: isPaid ? (data.payment_method || 'Transferencia') : '',
       description: desc,
-      status: 'PENDIENTE',
+      status: isPaid ? 'PAGADO' : 'PENDIENTE',
       due_date: data.due_date || data.start_date,
       notes: `Periodo correspondiente del ${data.start_date} al ${data.end_date}`
     });
@@ -610,13 +616,45 @@ export async function generateRenewalPeriod(data: {
       return { success: false, error: insErr.message };
     }
 
-    // Set proposal payment_status to PENDIENTE so that the dashboard and portal show pending renewal
-    await supabaseAdmin
-      .from('proposals')
-      .update({
-        payment_status: 'PENDIENTE'
-      })
-      .eq('id', data.proposal_id);
+    if (isPaid) {
+      // Recalculate total paid
+      const { data: allPayments } = await supabaseAdmin
+        .from('proposal_payments')
+        .select('amount, status')
+        .eq('proposal_id', data.proposal_id);
+
+      const hasPending = (allPayments || []).some((p) => p.status === 'PENDIENTE');
+      const totalPaid = (allPayments || [])
+        .filter((p) => p.status === 'PAGADO')
+        .reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+
+      // Extend expiration and set payment status to PAGADO
+      await supabaseAdmin
+        .from('proposals')
+        .update({
+          payment_status: hasPending ? 'PENDIENTE' : 'PAGADO',
+          payment_amount: totalPaid,
+          service_expiration: data.end_date
+        })
+        .eq('id', data.proposal_id);
+
+      await supabaseAdmin
+        .from('proposal_services')
+        .update({
+          expiration_date: data.end_date,
+          status: 'ACTIVE'
+        })
+        .eq('proposal_id', data.proposal_id)
+        .eq('billing_type', 'RECURRENT');
+    } else {
+      // Set proposal payment_status to PENDIENTE so that the dashboard and portal show pending renewal
+      await supabaseAdmin
+        .from('proposals')
+        .update({
+          payment_status: 'PENDIENTE'
+        })
+        .eq('id', data.proposal_id);
+    }
 
     safeRevalidatePath('/dashboard');
     safeRevalidatePath(`/p/${data.proposal_id}`);

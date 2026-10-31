@@ -138,6 +138,8 @@ export function ContractsDashboardClient({
   const [renewalAmount, setRenewalAmount] = useState('');
   const [renewalDesc, setRenewalDesc] = useState('');
   const [renewalNotifyClient, setRenewalNotifyClient] = useState(true);
+  const [renewalMarkAsPaid, setRenewalMarkAsPaid] = useState(false);
+  const [renewalPaymentMethod, setRenewalPaymentMethod] = useState('Transferencia');
   const [isSubmittingRenewal, setIsSubmittingRenewal] = useState(false);
 
   // Details Modal
@@ -239,6 +241,13 @@ export function ContractsDashboardClient({
   };
 
   const handleOpenPaymentModal = (prop: Proposal) => {
+    // Si la propuesta tiene una cuota o renovación pendiente, usarla directamente
+    const pendingPayment = prop.payments?.find((p) => p.status === 'PENDIENTE');
+    if (pendingPayment) {
+      handleOpenPaymentModalForCuota(prop, pendingPayment);
+      return;
+    }
+
     setSelectedProposalForPayment(prop);
     setSelectedPaymentIdForPayment(undefined);
     setPaymentNewExpirationDate(undefined);
@@ -254,9 +263,9 @@ export function ContractsDashboardClient({
     setPaymentAmount(payment.amount ? payment.amount.toString() : '');
     setPaymentDesc(payment.description || `Pago cuota - ${prop.client_company}`);
 
-    // If the payment description has an end date like "al 2026-12-05", extract it
+    // Si la cuota tiene una fecha límite o descripción con fecha final "al YYYY-MM-DD", extraerla para extender vigencia
     let newExp = payment.due_date;
-    const match = payment.description?.match(/al\s+(\d{4}-\d{2}-\d{2})/);
+    const match = (payment.description || '').match(/al\s+(\d{4}-\d{2}-\d{2})/) || (payment.notes || '').match(/al\s+(\d{4}-\d{2}-\d{2})/);
     if (match) {
       newExp = match[1];
     }
@@ -295,6 +304,8 @@ export function ContractsDashboardClient({
 
   const handleOpenRenewalModal = (prop: Proposal) => {
     setSelectedProposalForRenewal(prop);
+    setRenewalMarkAsPaid(false);
+    setRenewalPaymentMethod('Transferencia');
 
     // Determine start date from current expiration or start date
     const currentExp = prop.service_expiration || prop.start_date || new Date().toISOString().split('T')[0];
@@ -347,14 +358,18 @@ export function ContractsDashboardClient({
         due_date: renewalDueDate,
         description: renewalDesc,
         notify_client: renewalNotifyClient,
-        client_email: selectedProposalForRenewal.client_email
+        client_email: selectedProposalForRenewal.client_email,
+        mark_as_paid: renewalMarkAsPaid,
+        payment_method: renewalPaymentMethod
       });
 
       if (!res.success) {
         toast.error(res.error || 'Error al generar periodo de renovación');
       } else {
         toast.success(
-          renewalNotifyClient
+          renewalMarkAsPaid
+            ? '¡Renovación y pago registrados con éxito! Vigencia extendida.'
+            : renewalNotifyClient
             ? 'Cuota de renovación generada y cliente notificado por correo'
             : 'Cuota de renovación generada exitosamente'
         );
@@ -952,6 +967,18 @@ export function ContractsDashboardClient({
                         const isMixed = hasRecurrent && hasOneTime;
                         const isPureOneTime = hasOneTime && !hasRecurrent;
 
+                        // Determinar cuotas pendientes y si es una renovación
+                        const hasPendingRenewal = prop.payments?.some(
+                          (p) =>
+                            p.status === 'PENDIENTE' &&
+                            (p.id?.startsWith('pay-renov') ||
+                              p.description?.toLowerCase().includes('renovac') ||
+                              (p.invoice_number && p.invoice_number.includes('-R')))
+                        );
+                        const hasPendingPayment =
+                          prop.payments?.some((p) => p.status === 'PENDIENTE') ||
+                          (!isPaid && (prop.payment_amount || 0) < totalAmount);
+
                         return (
                           <TableRow key={prop.id} className='hover:bg-muted/30 transition-colors'>
                             <TableCell>
@@ -1013,16 +1040,16 @@ export function ContractsDashboardClient({
                             </TableCell>
 
                             <TableCell>
-                              {prop.payments?.some((p) => p.status === 'PENDIENTE') ? (
+                              {hasPendingRenewal ? (
                                 <Badge className='bg-amber-500/10 text-amber-500 border border-amber-500/30 text-xs font-semibold'>
                                   RENOVACIÓN PENDIENTE
                                 </Badge>
-                              ) : isPaid ? (
+                              ) : isPaid && !hasPendingPayment ? (
                                 <Badge className='bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-xs font-semibold'>
-                                  VIGENTE
+                                  {isPureOneTime ? 'PAGADO' : 'VIGENTE'}
                                 </Badge>
                               ) : isPartial ? (
-                                <Badge className='bg-amber-500/10 text-amber-500 border border-amber-500/30 text-xs font-semibold'>
+                                <Badge className='bg-blue-500/10 text-blue-500 border border-blue-500/30 text-xs font-semibold'>
                                   PARCIAL
                                 </Badge>
                               ) : (
@@ -1077,16 +1104,26 @@ export function ContractsDashboardClient({
                                   </Button>
                                 )}
 
-                                {/* Registrar Pago */}
-                                <Button
-                                  variant='ghost'
-                                  size='sm'
-                                  onClick={() => handleOpenPaymentModal(prop)}
-                                  className='h-8 w-8 p-0 cursor-pointer text-emerald-500 hover:text-emerald-400'
-                                  title='Registrar Pago o Abono'
-                                >
-                                  <Icons.creditCard className='h-4 w-4' />
-                                </Button>
+                                {/* Registrar Pago (Solo si el contrato tiene pagos o cuotas pendientes) */}
+                                {hasPendingPayment && (
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => handleOpenPaymentModal(prop)}
+                                    className={`h-8 w-8 p-0 cursor-pointer ${
+                                      hasPendingRenewal
+                                        ? 'text-amber-500 hover:text-amber-400'
+                                        : 'text-emerald-500 hover:text-emerald-400'
+                                    }`}
+                                    title={
+                                      hasPendingRenewal
+                                        ? 'Registrar Pago de Renovación Pendiente'
+                                        : 'Registrar Pago o Abono'
+                                    }
+                                  >
+                                    <Icons.creditCard className='h-4 w-4' />
+                                  </Button>
+                                )}
 
                                 {/* Ver Detalles */}
                                 <Button
@@ -2119,14 +2156,50 @@ export function ContractsDashboardClient({
               />
             </div>
 
-            <div className='flex items-center space-x-2 pt-2 border-t border-border/40'>
+            <div className='p-3 rounded-lg border border-border/50 bg-muted/10 space-y-3'>
+              <div className='flex items-center justify-between gap-2'>
+                <div className='space-y-0.5'>
+                  <Label htmlFor='mark-paid' className='text-xs font-semibold cursor-pointer'>
+                    ¿Registrar pago de esta renovación ahora mismo?
+                  </Label>
+                  <p className='text-[11px] text-muted-foreground'>
+                    Márcalo como pagado para extender la vigencia de inmediato sin dejar cuotas pendientes.
+                  </p>
+                </div>
+                <Switch
+                  id='mark-paid'
+                  checked={renewalMarkAsPaid}
+                  onCheckedChange={setRenewalMarkAsPaid}
+                />
+              </div>
+
+              {renewalMarkAsPaid && (
+                <div className='space-y-1.5 pt-2 border-t border-border/40'>
+                  <Label className='text-xs'>Método de Pago Recibido</Label>
+                  <Select value={renewalPaymentMethod} onValueChange={(val) => setRenewalPaymentMethod(val || 'Transferencia')}>
+                    <SelectTrigger className='h-8 text-xs'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='Transferencia'>Transferencia Bancaria</SelectItem>
+                      <SelectItem value='Binance'>Binance Pay / USDT</SelectItem>
+                      <SelectItem value='Zelle'>Zelle</SelectItem>
+                      <SelectItem value='Efectivo'>Efectivo</SelectItem>
+                      <SelectItem value='Tarjeta'>Tarjeta</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <div className='flex items-center space-x-2 pt-1'>
               <Switch
                 id='notify-client'
                 checked={renewalNotifyClient}
                 onCheckedChange={setRenewalNotifyClient}
               />
               <Label htmlFor='notify-client' className='text-xs font-medium cursor-pointer'>
-                Enviar aviso de renovación por correo al cliente automáticamente
+                Enviar comprobante / aviso por correo al cliente
               </Label>
             </div>
 
@@ -2137,9 +2210,17 @@ export function ContractsDashboardClient({
               <Button
                 type='submit'
                 disabled={isSubmittingRenewal}
-                className='bg-amber-600 hover:bg-amber-500 text-white font-medium'
+                className={
+                  renewalMarkAsPaid
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium'
+                    : 'bg-amber-600 hover:bg-amber-500 text-white font-medium'
+                }
               >
-                {isSubmittingRenewal ? 'Generando...' : 'Generar Cuota de Renovación'}
+                {isSubmittingRenewal
+                  ? 'Procesando...'
+                  : renewalMarkAsPaid
+                  ? 'Confirmar Renovación y Pago'
+                  : 'Generar Cuota de Renovación'}
               </Button>
             </DialogFooter>
           </form>
