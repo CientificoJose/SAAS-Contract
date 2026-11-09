@@ -13,7 +13,14 @@ import type {
   PaymentMethodConfig
 } from '@/lib/supabase/types';
 import { SignatureBlock } from '@/components/proposals/signature-pad';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table';
 import { Icons } from '@/components/icons';
 import { toast } from 'sonner';
 
@@ -81,7 +88,13 @@ function PaymentMethodsGrid({
                 <div>
                   <h4 className='font-bold text-sm text-slate-900'>{pm.name}</h4>
                   <span className='text-[10px] font-semibold uppercase tracking-wider text-slate-400'>
-                    {pm.type === 'zelle' ? 'Transferencia USA' : pm.type === 'binance' ? 'Cripto / Web3' : pm.type === 'bank_transfer' ? 'Banca Tradicional' : 'Pago Digital'}
+                    {pm.type === 'zelle'
+                      ? 'Transferencia USA'
+                      : pm.type === 'binance'
+                        ? 'Cripto / Web3'
+                        : pm.type === 'bank_transfer'
+                          ? 'Banca Tradicional'
+                          : 'Pago Digital'}
                   </span>
                 </div>
               </div>
@@ -107,7 +120,9 @@ function PaymentMethodsGrid({
                 {pm.account_holder && (
                   <div className='flex items-center justify-between gap-2'>
                     <span className='text-slate-500'>Titular:</span>
-                    <span className='font-medium text-slate-800 text-right truncate max-w-[150px]'>{pm.account_holder}</span>
+                    <span className='font-medium text-slate-800 text-right truncate max-w-[150px]'>
+                      {pm.account_holder}
+                    </span>
                   </div>
                 )}
 
@@ -186,9 +201,7 @@ function PaymentMethodsGrid({
               </div>
 
               {pm.instructions && (
-                <p className='text-[11px] text-slate-500 italic leading-snug'>
-                  {pm.instructions}
-                </p>
+                <p className='text-[11px] text-slate-500 italic leading-snug'>{pm.instructions}</p>
               )}
             </div>
           </div>
@@ -223,16 +236,24 @@ export function DynamicContractClient({
 
   // Dynamic branding colors & identity
   const brandName = creatorProfile?.tenant_name || globalSettings.brand_name || 'ContractCloud';
-  const primaryColor = proposal.brand_color_primary || creatorProfile?.brand_color_primary || globalSettings.color_primary || '#0066FF';
-  const secondaryColor = proposal.brand_color_secondary || creatorProfile?.brand_color_secondary || globalSettings.color_secondary || '#00F0FF';
-  
+  const primaryColor =
+    proposal.brand_color_primary ||
+    creatorProfile?.brand_color_primary ||
+    globalSettings.color_primary ||
+    '#0066FF';
+  const secondaryColor =
+    proposal.brand_color_secondary ||
+    creatorProfile?.brand_color_secondary ||
+    globalSettings.color_secondary ||
+    '#00F0FF';
+
   const rawLogo =
     proposal.brand_logo_url && proposal.brand_logo_url !== '/recurso.png'
       ? proposal.brand_logo_url
       : creatorProfile?.brand_logo_url && creatorProfile?.brand_logo_url !== '/recurso.png'
-      ? creatorProfile.brand_logo_url
-      : globalSettings.brand_logo ||
-        'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+        ? creatorProfile.brand_logo_url
+        : globalSettings.brand_logo ||
+          'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
 
   const [currentLogo, setCurrentLogo] = useState<string>(rawLogo);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -254,7 +275,10 @@ export function DynamicContractClient({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasStrokes, setHasStrokes] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [savingSignature, setSavingSignature] = useState(false);
 
   const [dbSignature, setDbSignature] = useState<SignatureData | null>(
@@ -383,7 +407,10 @@ export function DynamicContractClient({
         });
       } catch {}
 
-      setStatusMessage({ type: 'success', text: '¡Firma guardada y contrato formalizado con éxito!' });
+      setStatusMessage({
+        type: 'success',
+        text: '¡Firma guardada y contrato formalizado con éxito!'
+      });
       setTimeout(() => setStatusMessage(null), 4000);
     } catch (error) {
       console.error(error);
@@ -405,16 +432,59 @@ export function DynamicContractClient({
   };
 
   const advisorContactName =
-    creatorProfile?.full_name || creatorProfile?.tenant_name || globalSettings.brand_name || 'Administración';
+    creatorProfile?.full_name ||
+    creatorProfile?.tenant_name ||
+    globalSettings.brand_name ||
+    'Administración';
 
-  const totalProposalAmount = services.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
-  const oneTimeAmount = services
+  const resolvedServices: ProposalService[] =
+    services && services.length > 0
+      ? services
+      : proposal.service_name
+        ? [
+            {
+              id: `${proposal.id}-srv-1`,
+              proposal_id: proposal.id,
+              category_name: proposal.category_name || 'Servicios Profesionales',
+              service_name: proposal.service_name,
+              plan_name: proposal.plan_name || 'Plan Personalizado',
+              price: Number(proposal.price) || 0,
+              billing_type:
+                proposal.duration?.toLowerCase().includes('único') ||
+                proposal.duration?.toLowerCase().includes('unico')
+                  ? 'ONE_TIME'
+                  : 'RECURRENT',
+              billing_cycle: proposal.duration || 'Mensual',
+              features: proposal.features || '',
+              policies: '',
+              status: 'ACTIVO',
+              start_date:
+                proposal.start_date ||
+                proposal.created_at?.split('T')[0] ||
+                new Date().toISOString().split('T')[0],
+              expiration_date: proposal.service_expiration || '',
+              domain_included: proposal.domain_included ? 1 : 0,
+              domain_expiration: proposal.domain_expiration || ''
+            }
+          ]
+        : [];
+
+  const totalProposalAmount =
+    resolvedServices.length > 0
+      ? resolvedServices.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0)
+      : Number(proposal.price) || 0;
+
+  const oneTimeAmount = resolvedServices
     .filter((s) => s.billing_type === 'ONE_TIME')
     .reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
-  const recurrentAmount = services
+  const recurrentAmount = resolvedServices
     .filter((s) => s.billing_type === 'RECURRENT')
     .reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
-  const isRecurrent = services.some((s) => s.billing_type === 'RECURRENT');
+  const isRecurrent =
+    resolvedServices.some((s) => s.billing_type === 'RECURRENT') ||
+    (proposal.duration &&
+      !proposal.duration.toLowerCase().includes('único') &&
+      !proposal.duration.toLowerCase().includes('unico'));
   const pendingCuota = payments.find((p) => p.status === 'PENDIENTE');
 
   return (
@@ -490,7 +560,9 @@ export function DynamicContractClient({
           <div className='mb-8 border-b border-slate-200 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4'>
             <div>
               <h1 className='text-3xl font-black text-slate-900 tracking-tight'>
-                {isSigned ? 'Portal de Seguimiento del Contrato' : 'Propuesta de Servicios Comerciales'}
+                {isSigned
+                  ? 'Portal de Seguimiento del Contrato'
+                  : 'Propuesta de Servicios Comerciales'}
               </h1>
               <p className='mt-1.5 text-sm text-slate-500'>
                 Identificador: #{proposal.invoice_number} • {proposal.client_company}
@@ -512,7 +584,9 @@ export function DynamicContractClient({
                 />
               ) : (
                 <div className='flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200'>
-                  <span className='text-sm font-black tracking-tight text-slate-800'>{brandName}</span>
+                  <span className='text-sm font-black tracking-tight text-slate-800'>
+                    {brandName}
+                  </span>
                 </div>
               )}
               <p className='mt-1 text-xs font-bold text-slate-700'>{brandName}</p>
@@ -522,12 +596,16 @@ export function DynamicContractClient({
           {/* DATOS PROVEEDOR & CLIENTE */}
           <div className='mb-8 grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-5 rounded-xl border border-slate-200/60'>
             <div>
-              <h3 className='text-xs font-bold text-slate-400 uppercase tracking-wider mb-1'>Proveedor</h3>
+              <h3 className='text-xs font-bold text-slate-400 uppercase tracking-wider mb-1'>
+                Proveedor
+              </h3>
               <p className='text-sm font-bold text-slate-900'>{brandName}</p>
               <p className='text-xs text-slate-500'>Servicios y Soluciones Digitales</p>
             </div>
             <div>
-              <h3 className='text-xs font-bold text-slate-400 uppercase tracking-wider mb-1'>Cliente Titular</h3>
+              <h3 className='text-xs font-bold text-slate-400 uppercase tracking-wider mb-1'>
+                Cliente Titular
+              </h3>
               <p className='text-sm font-bold text-slate-900'>{proposal.client_name}</p>
               <p className='text-xs text-slate-600 font-medium'>{proposal.client_company}</p>
               {proposal.client_domain ? (
@@ -560,12 +638,17 @@ export function DynamicContractClient({
                         {pendingCuota.description || 'Renovación de Servicios Digitales'}
                       </h3>
                       <p className='text-xs text-slate-600 max-w-xl leading-relaxed'>
-                        Tu contrato marco se encuentra activo y formalizado. Para mantener tus servicios y accesos en funcionamiento ininterrumpido, por favor realiza el abono mediante cualquiera de los canales habilitados.
+                        Tu contrato marco se encuentra activo y formalizado. Para mantener tus
+                        servicios y accesos en funcionamiento ininterrumpido, por favor realiza el
+                        abono mediante cualquiera de los canales habilitados.
                       </p>
                       {pendingCuota.due_date ? (
                         <p className='text-xs text-amber-900 font-semibold flex items-center gap-1.5'>
                           <Icons.calendar className='h-3.5 w-3.5 text-amber-700' />
-                          <span>Fecha límite de pago: <strong>{displayFriendlyDate(pendingCuota.due_date)}</strong></span>
+                          <span>
+                            Fecha límite de pago:{' '}
+                            <strong>{displayFriendlyDate(pendingCuota.due_date)}</strong>
+                          </span>
                         </p>
                       ) : null}
                     </div>
@@ -654,7 +737,7 @@ export function DynamicContractClient({
               {activeTab === 'servicios' && (
                 <div className='space-y-6'>
                   <div className='grid gap-4 md:grid-cols-2'>
-                    {services.map((ser, idx) => (
+                    {resolvedServices.map((ser, idx) => (
                       <div
                         key={ser.id || idx}
                         className='border border-slate-200 rounded-xl p-5 bg-white shadow-sm relative overflow-hidden'
@@ -665,7 +748,9 @@ export function DynamicContractClient({
                             <span className='text-[10px] text-slate-400 font-bold uppercase tracking-wider'>
                               {ser.category_name}
                             </span>
-                            <h4 className='font-bold text-base text-slate-900'>{ser.service_name}</h4>
+                            <h4 className='font-bold text-base text-slate-900'>
+                              {ser.service_name}
+                            </h4>
                           </div>
                           <span className='text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase bg-emerald-100 text-emerald-800'>
                             Activo
@@ -673,8 +758,12 @@ export function DynamicContractClient({
                         </div>
 
                         <div className='text-xs text-slate-600 space-y-1 mb-4'>
-                          <div>Plan: <strong>{ser.plan_name || 'Estándar'}</strong></div>
-                          <div>Inversión: <strong>${Number(ser.price).toFixed(2)} USD</strong></div>
+                          <div>
+                            Plan: <strong>{ser.plan_name || 'Estándar'}</strong>
+                          </div>
+                          <div>
+                            Inversión: <strong>${Number(ser.price).toFixed(2)} USD</strong>
+                          </div>
                           <div>
                             Modalidad:{' '}
                             <strong>
@@ -713,10 +802,13 @@ export function DynamicContractClient({
 
                         {ser.billing_type === 'RECURRENT' ? (
                           <div className='pt-3 border-t border-slate-100 text-[10px] space-y-1'>
-                            <div className='text-slate-400'>Inicio: {displayFriendlyDate(ser.start_date)}</div>
+                            <div className='text-slate-400'>
+                              Inicio: {displayFriendlyDate(ser.start_date)}
+                            </div>
                             <div className='flex items-center justify-between'>
                               <span className='text-slate-600'>
-                                Vigencia / Renovación: <strong>{displayFriendlyDate(ser.expiration_date)}</strong>
+                                Vigencia / Renovación:{' '}
+                                <strong>{displayFriendlyDate(ser.expiration_date)}</strong>
                               </span>
                               {pendingCuota ? (
                                 <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300'>
@@ -752,18 +844,25 @@ export function DynamicContractClient({
                       </h3>
                       <div className='bg-slate-50 border border-slate-200 rounded-xl p-4 md:p-6 grid gap-4 md:grid-cols-2'>
                         {credentials.map((cred, idx) => (
-                          <div key={idx} className='bg-white border border-slate-200 p-4 rounded-xl shadow-sm'>
+                          <div
+                            key={idx}
+                            className='bg-white border border-slate-200 p-4 rounded-xl shadow-sm'
+                          >
                             <h4 className='font-bold text-sm text-slate-800 mb-2 border-b border-slate-100 pb-1.5'>
                               {cred.description}
                             </h4>
                             <div className='space-y-2 text-xs'>
                               <div className='flex justify-between text-slate-500'>
                                 <span>Usuario:</span>
-                                <span className='font-mono text-slate-900 font-bold select-all'>{cred.email}</span>
+                                <span className='font-mono text-slate-900 font-bold select-all'>
+                                  {cred.email}
+                                </span>
                               </div>
                               <div className='flex justify-between text-slate-500'>
                                 <span>Contraseña:</span>
-                                <span className='font-mono text-slate-900 font-bold select-all'>{cred.password}</span>
+                                <span className='font-mono text-slate-900 font-bold select-all'>
+                                  {cred.password}
+                                </span>
                               </div>
                               {cred.notes ? (
                                 <p className='text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded'>
@@ -788,10 +887,17 @@ export function DynamicContractClient({
                         <span className='text-[10px] font-black uppercase text-amber-800 tracking-wider'>
                           Cuota Actual por Renovar
                         </span>
-                        <h4 className='font-bold text-sm text-slate-900'>{pendingCuota.description || 'Renovación de Servicio'}</h4>
+                        <h4 className='font-bold text-sm text-slate-900'>
+                          {pendingCuota.description || 'Renovación de Servicio'}
+                        </h4>
                         <p className='text-xs text-slate-600'>
-                          Monto: <strong className='text-contract-primary'>${Number(pendingCuota.amount).toFixed(2)} USD</strong>
-                          {pendingCuota.due_date ? ` • Fecha Límite: ${displayFriendlyDate(pendingCuota.due_date)}` : ''}
+                          Monto:{' '}
+                          <strong className='text-contract-primary'>
+                            ${Number(pendingCuota.amount).toFixed(2)} USD
+                          </strong>
+                          {pendingCuota.due_date
+                            ? ` • Fecha Límite: ${displayFriendlyDate(pendingCuota.due_date)}`
+                            : ''}
                         </p>
                       </div>
                       <a
@@ -812,10 +918,16 @@ export function DynamicContractClient({
                     <Table>
                       <TableHeader className='bg-slate-50'>
                         <TableRow>
-                          <TableHead className='font-bold text-slate-800'>Recibo / Factura</TableHead>
-                          <TableHead className='font-bold text-slate-800'>Concepto / Periodo</TableHead>
+                          <TableHead className='font-bold text-slate-800'>
+                            Recibo / Factura
+                          </TableHead>
+                          <TableHead className='font-bold text-slate-800'>
+                            Concepto / Periodo
+                          </TableHead>
                           <TableHead className='font-bold text-slate-800'>Monto</TableHead>
-                          <TableHead className='font-bold text-slate-800'>Fecha / Vencimiento</TableHead>
+                          <TableHead className='font-bold text-slate-800'>
+                            Fecha / Vencimiento
+                          </TableHead>
                           <TableHead className='font-bold text-slate-800'>Método</TableHead>
                           <TableHead className='font-bold text-slate-800'>Estado</TableHead>
                         </TableRow>
@@ -832,17 +944,28 @@ export function DynamicContractClient({
                             const isPending = pay.status === 'PENDIENTE';
                             return (
                               <TableRow key={pay.id || i} className='text-xs'>
-                                <TableCell className='font-bold font-mono'>{pay.invoice_number || proposal.invoice_number}</TableCell>
-                                <TableCell className='text-slate-800 font-medium'>{pay.description || 'Cuota de servicio'}</TableCell>
-                                <TableCell className={`font-bold ${isPending ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                <TableCell className='font-bold font-mono'>
+                                  {pay.invoice_number || proposal.invoice_number}
+                                </TableCell>
+                                <TableCell className='text-slate-800 font-medium'>
+                                  {pay.description || 'Cuota de servicio'}
+                                </TableCell>
+                                <TableCell
+                                  className={`font-bold ${isPending ? 'text-amber-600' : 'text-emerald-600'}`}
+                                >
                                   ${Number(pay.amount).toFixed(2)} USD
                                 </TableCell>
                                 <TableCell className='text-slate-600'>
                                   {isPending
-                                    ? (pay.due_date ? `Vence: ${displayFriendlyDate(pay.due_date)}` : 'Pendiente')
+                                    ? pay.due_date
+                                      ? `Vence: ${displayFriendlyDate(pay.due_date)}`
+                                      : 'Pendiente'
                                     : displayFriendlyDate(pay.payment_date)}
                                 </TableCell>
-                                <TableCell className='text-slate-600'>{pay.payment_method || (isPending ? 'Por definir' : 'Transferencia')}</TableCell>
+                                <TableCell className='text-slate-600'>
+                                  {pay.payment_method ||
+                                    (isPending ? 'Por definir' : 'Transferencia')}
+                                </TableCell>
                                 <TableCell>
                                   <span
                                     className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -863,7 +986,10 @@ export function DynamicContractClient({
                   </div>
 
                   {/* Canales y Métodos de Pago Habilitados dentro del Portal */}
-                  <PaymentMethodsGrid methods={activePaymentMethods} copyToClipboard={copyToClipboard} />
+                  <PaymentMethodsGrid
+                    methods={activePaymentMethods}
+                    copyToClipboard={copyToClipboard}
+                  />
                 </div>
               )}
 
@@ -873,7 +999,10 @@ export function DynamicContractClient({
                   <h3 className='font-bold text-lg text-slate-900'>Equipo Especialista Asignado</h3>
                   <div className='grid gap-4 md:grid-cols-2'>
                     {collaborators.map((col, idx) => (
-                      <div key={idx} className='border border-slate-200 rounded-xl p-4 bg-white flex items-center gap-3'>
+                      <div
+                        key={idx}
+                        className='border border-slate-200 rounded-xl p-4 bg-white flex items-center gap-3'
+                      >
                         <div className='w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-orange-600'>
                           {col.name.slice(0, 2).toUpperCase()}
                         </div>
@@ -897,8 +1026,11 @@ export function DynamicContractClient({
                   <span>Servicios Incluidos en la Propuesta</span>
                 </h2>
                 <div className='space-y-4'>
-                  {services.map((ser, idx) => (
-                    <div key={ser.id || idx} className='border border-slate-200 rounded-xl p-5 bg-white shadow-sm'>
+                  {resolvedServices.map((ser, idx) => (
+                    <div
+                      key={ser.id || idx}
+                      className='border border-slate-200 rounded-xl p-5 bg-white shadow-sm'
+                    >
                       <div className='flex justify-between items-start mb-2'>
                         <div>
                           <div className='flex items-center gap-2 mb-1'>
@@ -917,10 +1049,16 @@ export function DynamicContractClient({
                           </div>
                           <h4 className='font-bold text-base text-slate-900'>{ser.service_name}</h4>
                         </div>
-                        <span className='text-sm font-bold text-orange-600'>${Number(ser.price).toFixed(2)} USD</span>
+                        <span className='text-sm font-bold text-orange-600'>
+                          ${Number(ser.price).toFixed(2)} USD
+                        </span>
                       </div>
                       <p className='text-xs text-slate-600 mb-3'>
-                        Plan: {ser.plan_name} ({ser.billing_type === 'RECURRENT' ? `Suscripción ${ser.billing_cycle || 'Anual'}` : 'Pago Único'})
+                        Plan: {ser.plan_name} (
+                        {ser.billing_type === 'RECURRENT'
+                          ? `Suscripción ${ser.billing_cycle || 'Anual'}`
+                          : 'Pago Único'}
+                        )
                       </p>
 
                       {ser.features ? (
@@ -938,7 +1076,9 @@ export function DynamicContractClient({
 
                       {ser.category_policies || ser.policies ? (
                         <div className='mt-3 p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600 space-y-1'>
-                          <h5 className='font-bold text-slate-800 text-[10px] uppercase'>Términos de Servicio:</h5>
+                          <h5 className='font-bold text-slate-800 text-[10px] uppercase'>
+                            Términos de Servicio:
+                          </h5>
                           {ser.category_policies && <p>{ser.category_policies}</p>}
                           {ser.policies && <p>{ser.policies}</p>}
                         </div>
@@ -967,13 +1107,17 @@ export function DynamicContractClient({
                       </div>
                       <div className='flex justify-between text-slate-500'>
                         <span>Método de Pago Sugerido:</span>
-                        <span className='font-bold text-slate-900'>{proposal.payment_method || 'Transferencia'}</span>
+                        <span className='font-bold text-slate-900'>
+                          {proposal.payment_method || 'Transferencia'}
+                        </span>
                       </div>
                     </div>
 
                     <div className='border-t border-slate-100 pt-4 flex justify-between items-center'>
                       <span className='font-bold text-slate-800 text-sm'>Inversión Total:</span>
-                      <span className='text-2xl font-black text-orange-600'>${totalProposalAmount.toFixed(2)} USD</span>
+                      <span className='text-2xl font-black text-orange-600'>
+                        ${totalProposalAmount.toFixed(2)} USD
+                      </span>
                     </div>
                   </div>
 
@@ -983,7 +1127,10 @@ export function DynamicContractClient({
                     </h3>
                     <div className='space-y-2'>
                       {payments.map((pay, i) => (
-                        <div key={pay.id || i} className='bg-white p-2.5 border border-slate-200 rounded-lg text-xs space-y-1'>
+                        <div
+                          key={pay.id || i}
+                          className='bg-white p-2.5 border border-slate-200 rounded-lg text-xs space-y-1'
+                        >
                           <div className='flex justify-between items-center'>
                             <span className='font-bold text-slate-800'>{pay.description}</span>
                             <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800'>
@@ -991,8 +1138,15 @@ export function DynamicContractClient({
                             </span>
                           </div>
                           <div className='flex justify-between text-slate-500 text-[11px]'>
-                            <span>Monto: <strong className='text-slate-800'>${Number(pay.amount).toFixed(2)} USD</strong></span>
-                            <span>{pay.due_date ? `Vence: ${displayFriendlyDate(pay.due_date)}` : ''}</span>
+                            <span>
+                              Monto:{' '}
+                              <strong className='text-slate-800'>
+                                ${Number(pay.amount).toFixed(2)} USD
+                              </strong>
+                            </span>
+                            <span>
+                              {pay.due_date ? `Vence: ${displayFriendlyDate(pay.due_date)}` : ''}
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -1002,7 +1156,10 @@ export function DynamicContractClient({
               </section>
 
               {/* CANALES Y MÉTODOS DE PAGO HABILITADOS */}
-              <PaymentMethodsGrid methods={activePaymentMethods} copyToClipboard={copyToClipboard} />
+              <PaymentMethodsGrid
+                methods={activePaymentMethods}
+                copyToClipboard={copyToClipboard}
+              />
 
               {/* FIRMA BLOCK */}
               <SignatureBlock

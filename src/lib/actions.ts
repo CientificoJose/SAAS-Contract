@@ -35,7 +35,10 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'qijoos3niievsik@gmail.com';
 export async function getCurrentUser() {
   try {
     const supabase = await createClient();
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error
+    } = await supabase.auth.getUser();
     if (error || !user) return null;
 
     // Fetch tenant profile
@@ -54,9 +57,12 @@ export async function getCurrentUser() {
         id: user.id,
         email: user.email || '',
         role: user.email === ADMIN_EMAIL ? 'admin' : 'user',
-        full_name: (user.user_metadata?.full_name as string) || (user.email ? user.email.split('@')[0] : 'Usuario'),
+        full_name:
+          (user.user_metadata?.full_name as string) ||
+          (user.email ? user.email.split('@')[0] : 'Usuario'),
         tenant_name: (user.user_metadata?.tenant_name as string) || 'ContractCloud',
-        brand_logo_url: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
+        brand_logo_url:
+          'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
         brand_color_primary: '#0066FF',
         brand_color_secondary: '#00F0FF'
       };
@@ -164,21 +170,17 @@ export async function uploadAsset(formData: FormData): Promise<{ url: string }> 
     const cleanName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
     const filePath = `uploads/${cleanName}`;
 
-    const { error } = await supabaseAdmin.storage
-      .from('contract-assets')
-      .upload(filePath, buffer, {
-        contentType: file.type || 'image/png',
-        upsert: true
-      });
+    const { error } = await supabaseAdmin.storage.from('contract-assets').upload(filePath, buffer, {
+      contentType: file.type || 'image/png',
+      upsert: true
+    });
 
     if (error) {
       console.error('Storage upload error:', error);
       throw new Error(error.message || 'Error al subir archivo a Supabase Storage');
     }
 
-    const { data: pubUrl } = supabaseAdmin.storage
-      .from('contract-assets')
-      .getPublicUrl(filePath);
+    const { data: pubUrl } = supabaseAdmin.storage.from('contract-assets').getPublicUrl(filePath);
 
     return { url: pubUrl.publicUrl };
   } catch (err: any) {
@@ -213,21 +215,60 @@ export async function getProposals(): Promise<(Proposal & { services?: ProposalS
 
     const [servicesRes, paymentsRes] = await Promise.all([
       supabaseAdmin.from('proposal_services').select('*'),
-      supabaseAdmin.from('proposal_payments').select('*').order('payment_date', { ascending: false })
+      supabaseAdmin
+        .from('proposal_payments')
+        .select('*')
+        .order('payment_date', { ascending: false })
     ]);
 
     const services = servicesRes.data || [];
     const payments = paymentsRes.data || [];
 
-    return proposals.map((p) => ({
-      ...p,
-      // Fix any legacy /recurso.png or empty logo references
-      brand_logo_url: p.brand_logo_url && p.brand_logo_url !== '/recurso.png'
-        ? p.brand_logo_url
-        : 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
-      services: services.filter((s) => s.proposal_id === p.id),
-      payments: payments.filter((pm) => pm.proposal_id === p.id)
-    })) as (Proposal & { services?: ProposalService[]; payments?: ProposalPayment[] })[];
+    return proposals.map((p) => {
+      const pServices = services.filter((s) => s.proposal_id === p.id);
+      const fallbackServices: ProposalService[] =
+        pServices.length > 0
+          ? pServices
+          : p.service_name
+            ? [
+                {
+                  id: `${p.id}-srv-1`,
+                  proposal_id: p.id,
+                  category_name: p.category_name || 'Servicios Profesionales',
+                  service_name: p.service_name,
+                  plan_name: p.plan_name || 'Plan Personalizado',
+                  price: Number(p.price) || 0,
+                  billing_type:
+                    p.duration?.toLowerCase().includes('único') ||
+                    p.duration?.toLowerCase().includes('unico')
+                      ? 'ONE_TIME'
+                      : 'RECURRENT',
+                  billing_cycle: p.duration || 'Mensual',
+                  features: p.features || '',
+                  policies: '',
+                  status: 'ACTIVO',
+                  start_date:
+                    p.start_date ||
+                    p.created_at?.split('T')[0] ||
+                    new Date().toISOString().split('T')[0],
+                  expiration_date: p.service_expiration || '',
+                  domain_included: p.domain_included ? 1 : 0,
+                  domain_expiration: p.domain_expiration || ''
+                }
+              ]
+            : [];
+
+      return {
+        ...p,
+        // Fix any legacy /recurso.png or empty logo references
+        brand_logo_url:
+          p.brand_logo_url && p.brand_logo_url !== '/recurso.png'
+            ? p.brand_logo_url
+            : 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
+        services: fallbackServices,
+        payments: payments.filter((pm) => pm.proposal_id === p.id)
+      };
+    }) as (Proposal & { services?: ProposalService[]; payments?: ProposalPayment[] })[];
   } catch (err) {
     console.error('Unexpected error in getProposals:', err);
     return [];
@@ -251,12 +292,21 @@ export async function getProposalById(id: string): Promise<{
       .single();
 
     if (pError || !proposal) {
-      return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null, paymentMethods: [] };
+      return {
+        proposal: null,
+        credentials: [],
+        services: [],
+        payments: [],
+        collaborators: [],
+        creatorProfile: null,
+        paymentMethods: []
+      };
     }
 
     // Fix legacy /recurso.png
     if (proposal.brand_logo_url === '/recurso.png' || !proposal.brand_logo_url) {
-      proposal.brand_logo_url = 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+      proposal.brand_logo_url =
+        'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
     }
 
     // Fetch creator tenant profile if user_id is present
@@ -273,15 +323,49 @@ export async function getProposalById(id: string): Promise<{
     const [credsRes, servicesRes, paymentsRes, collabRes, pMethods] = await Promise.all([
       supabaseAdmin.from('credentials').select('*').eq('proposal_id', id),
       supabaseAdmin.from('proposal_services').select('*').eq('proposal_id', id),
-      supabaseAdmin.from('proposal_payments').select('*').eq('proposal_id', id).order('payment_date', { ascending: true }),
+      supabaseAdmin
+        .from('proposal_payments')
+        .select('*')
+        .eq('proposal_id', id)
+        .order('payment_date', { ascending: true }),
       supabaseAdmin.from('proposal_collaborators').select('*').eq('proposal_id', id),
       getPaymentMethods(proposal.user_id)
     ]);
 
+    let finalServices = (servicesRes.data || []) as ProposalService[];
+    if (finalServices.length === 0 && proposal.service_name) {
+      finalServices = [
+        {
+          id: `${proposal.id}-srv-1`,
+          proposal_id: proposal.id,
+          category_name: proposal.category_name || 'Servicios Profesionales',
+          service_name: proposal.service_name,
+          plan_name: proposal.plan_name || 'Plan Personalizado',
+          price: Number(proposal.price) || 0,
+          billing_type:
+            proposal.duration?.toLowerCase().includes('único') ||
+            proposal.duration?.toLowerCase().includes('unico')
+              ? 'ONE_TIME'
+              : 'RECURRENT',
+          billing_cycle: proposal.duration || 'Mensual',
+          features: proposal.features || '',
+          policies: '',
+          status: 'ACTIVO',
+          start_date:
+            proposal.start_date ||
+            proposal.created_at?.split('T')[0] ||
+            new Date().toISOString().split('T')[0],
+          expiration_date: proposal.service_expiration || '',
+          domain_included: proposal.domain_included ? 1 : 0,
+          domain_expiration: proposal.domain_expiration || ''
+        }
+      ];
+    }
+
     return {
       proposal: proposal as Proposal,
       credentials: (credsRes.data || []) as Credential[],
-      services: (servicesRes.data || []) as ProposalService[],
+      services: finalServices,
       payments: (paymentsRes.data || []) as ProposalPayment[],
       collaborators: (collabRes.data || []) as ProposalCollaborator[],
       creatorProfile,
@@ -289,7 +373,15 @@ export async function getProposalById(id: string): Promise<{
     };
   } catch (err) {
     console.error('Error in getProposalById:', err);
-    return { proposal: null, credentials: [], services: [], payments: [], collaborators: [], creatorProfile: null, paymentMethods: [] };
+    return {
+      proposal: null,
+      credentials: [],
+      services: [],
+      payments: [],
+      collaborators: [],
+      creatorProfile: null,
+      paymentMethods: []
+    };
   }
 }
 
@@ -328,10 +420,12 @@ export async function createProposal(data: {
     const brandLogo =
       data.brand_logo_url && data.brand_logo_url !== '/recurso.png'
         ? data.brand_logo_url
-        : tenantProf?.brand_logo_url || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+        : tenantProf?.brand_logo_url ||
+          'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
 
     const brandPrimary = data.brand_color_primary || tenantProf?.brand_color_primary || '#0066FF';
-    const brandSecondary = data.brand_color_secondary || tenantProf?.brand_color_secondary || '#00F0FF';
+    const brandSecondary =
+      data.brand_color_secondary || tenantProf?.brand_color_secondary || '#00F0FF';
 
     const hasRecurrent = data.services.some((s) => s.billing_type === 'RECURRENT');
     const hasOneTime = data.services.some((s) => s.billing_type === 'ONE_TIME');
@@ -344,7 +438,8 @@ export async function createProposal(data: {
       calculatedDuration = recurrentService?.billing_cycle || 'Recurrente';
     }
 
-    const calculatedStartDate = data.services[0]?.start_date || new Date().toISOString().split('T')[0];
+    const calculatedStartDate =
+      data.services[0]?.start_date || new Date().toISOString().split('T')[0];
     const calculatedExpiration = recurrentService?.expiration_date || null;
 
     const { error: pError } = await supabaseAdmin.from('proposals').insert({
@@ -391,15 +486,20 @@ export async function createProposal(data: {
         billing_cycle: s.billing_cycle || 'Anual',
         features: s.features || '',
         policies: s.policies || '',
-        category_policies: s.category_policies || '',
         status: s.status || 'ACTIVO',
         start_date: s.start_date || new Date().toISOString().split('T')[0],
-        expiration_date: s.expiration_date || '',
-        suspension_date: s.suspension_date || '',
+        expiration_date: s.expiration_date || null,
+        suspension_date: s.suspension_date || null,
         domain_included: s.domain_included ? 1 : 0,
-        domain_expiration: s.domain_expiration || ''
+        domain_expiration: s.domain_expiration || null
       }));
-      await supabaseAdmin.from('proposal_services').insert(servicesToInsert);
+      const { error: sError } = await supabaseAdmin
+        .from('proposal_services')
+        .insert(servicesToInsert);
+      if (sError) {
+        console.error('Error inserting proposal_services:', sError);
+        throw sError;
+      }
     }
 
     // Insert Credentials
@@ -412,7 +512,11 @@ export async function createProposal(data: {
         notes: c.notes || '',
         dynamic_fields: c.dynamic_fields || ''
       }));
-      await supabaseAdmin.from('credentials').insert(credsToInsert);
+      const { error: credError } = await supabaseAdmin.from('credentials').insert(credsToInsert);
+      if (credError) {
+        console.error('Error inserting credentials:', credError);
+        throw credError;
+      }
     }
 
     // Insert Payments
@@ -422,16 +526,26 @@ export async function createProposal(data: {
         proposal_id: proposalId,
         invoice_number: pm.invoice_number || data.invoice_number,
         amount: Number(pm.amount) || 0,
-        payment_date: pm.payment_date || (data.payment_status === 'PAGADO' ? data.payment_date : ''),
+        payment_date:
+          pm.payment_date || (data.payment_status === 'PAGADO' ? data.payment_date : ''),
         payment_method: pm.payment_method || data.payment_method || 'Transferencia',
         description: pm.description || `Cuota #${idx + 1}`,
-        status: data.payment_status === 'PAGADO' && (!pm.status || pm.status === 'PENDIENTE') && (data.payments?.length === 1)
-          ? 'PAGADO'
-          : (pm.status || 'PENDIENTE'),
+        status:
+          data.payment_status === 'PAGADO' &&
+          (!pm.status || pm.status === 'PENDIENTE') &&
+          data.payments?.length === 1
+            ? 'PAGADO'
+            : pm.status || 'PENDIENTE',
         notes: pm.notes || '',
         due_date: pm.due_date || ''
       }));
-      await supabaseAdmin.from('proposal_payments').insert(paymentsToInsert);
+      const { error: payError } = await supabaseAdmin
+        .from('proposal_payments')
+        .insert(paymentsToInsert);
+      if (payError) {
+        console.error('Error inserting proposal_payments:', payError);
+        throw payError;
+      }
     }
 
     // Insert Collaborators
@@ -444,7 +558,13 @@ export async function createProposal(data: {
         logo_url: cb.logo_url || '',
         contact: cb.contact || ''
       }));
-      await supabaseAdmin.from('proposal_collaborators').insert(collabToInsert);
+      const { error: colError } = await supabaseAdmin
+        .from('proposal_collaborators')
+        .insert(collabToInsert);
+      if (colError) {
+        console.error('Error inserting proposal_collaborators:', colError);
+        throw colError;
+      }
     }
 
     revalidatePath('/dashboard');
@@ -550,10 +670,7 @@ export async function registerPayment(data: {
         .eq('billing_type', 'RECURRENT');
     }
 
-    await supabaseAdmin
-      .from('proposals')
-      .update(proposalUpdate)
-      .eq('id', data.proposal_id);
+    await supabaseAdmin.from('proposals').update(proposalUpdate).eq('id', data.proposal_id);
 
     safeRevalidatePath('/dashboard');
     safeRevalidatePath(`/p/${data.proposal_id}`);
@@ -594,7 +711,8 @@ export async function generateRenewalPeriod(data: {
 
     const receiptSuffix = (count || 0) + 1;
     const paymentId = `pay-renov-${Date.now()}`;
-    const desc = data.description || `Renovación de Servicio: ${data.start_date} al ${data.end_date}`;
+    const desc =
+      data.description || `Renovación de Servicio: ${data.start_date} al ${data.end_date}`;
     const isPaid = !!data.mark_as_paid;
     const todayISO = new Date().toISOString().split('T')[0];
 
@@ -604,7 +722,7 @@ export async function generateRenewalPeriod(data: {
       invoice_number: `${proposal.invoice_number}-R${receiptSuffix}`,
       amount: data.amount,
       payment_date: isPaid ? todayISO : null,
-      payment_method: isPaid ? (data.payment_method || 'Transferencia') : '',
+      payment_method: isPaid ? data.payment_method || 'Transferencia' : '',
       description: desc,
       status: isPaid ? 'PAGADO' : 'PENDIENTE',
       due_date: data.due_date || data.start_date,
@@ -700,7 +818,10 @@ export async function saveSignature(proposalId: string, signatureImage: string, 
           finalSignatureUrl = pubUrl.publicUrl;
         }
       } catch (uploadErr) {
-        console.warn('Could not upload signature to storage, saving as dataURL fallback', uploadErr);
+        console.warn(
+          'Could not upload signature to storage, saving as dataURL fallback',
+          uploadErr
+        );
       }
     }
 
@@ -766,7 +887,11 @@ export async function getCatalog(): Promise<CatalogCategory[]> {
 
 export async function createCategory(name: string, policies?: string) {
   try {
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `cat-${Date.now()}`;
+    const id =
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '') || `cat-${Date.now()}`;
     const { error } = await supabaseAdmin.from('categories').insert({
       id,
       name,
@@ -799,7 +924,10 @@ export async function updateCategory(id: string, name: string, policies?: string
 export async function deleteCategory(id: string) {
   try {
     // Delete cascading plans and services first
-    const { data: services } = await supabaseAdmin.from('services').select('id').eq('category_id', id);
+    const { data: services } = await supabaseAdmin
+      .from('services')
+      .select('id')
+      .eq('category_id', id);
     if (services && services.length > 0) {
       const serviceIds = services.map((s) => s.id);
       await supabaseAdmin.from('service_plans').delete().in('service_id', serviceIds);
@@ -817,7 +945,11 @@ export async function deleteCategory(id: string) {
 
 export async function createService(categoryId: string, name: string) {
   try {
-    const id = `${categoryId}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}` || `srv-${Date.now()}`;
+    const id =
+      `${categoryId}-${name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')}` || `srv-${Date.now()}`;
     const { error } = await supabaseAdmin.from('services').insert({
       id,
       category_id: categoryId,
@@ -869,7 +1001,11 @@ export async function createServicePlan(
   policies?: string
 ) {
   try {
-    const id = `${serviceId}-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')}` || `plan-${Date.now()}`;
+    const id =
+      `${serviceId}-${name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')}` || `plan-${Date.now()}`;
     const { error } = await supabaseAdmin.from('service_plans').insert({
       id,
       service_id: serviceId,
@@ -938,7 +1074,8 @@ export async function getSettings(): Promise<Record<string, string>> {
     const { data } = await supabaseAdmin.from('settings').select('*');
     const map: Record<string, string> = {
       brand_name: 'ContractCloud',
-      brand_logo: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
+      brand_logo:
+        'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
       color_primary: '#0066FF',
       color_secondary: '#00F0FF',
       smtp_host: process.env.SMTP_HOST || 'mail.press-cloud.com',
@@ -960,7 +1097,8 @@ export async function getSettings(): Promise<Record<string, string>> {
     if (cur?.profile) {
       const p = cur.profile;
       if (p.tenant_name) map.brand_name = p.tenant_name;
-      if (p.brand_logo_url && p.brand_logo_url !== '/recurso.png') map.brand_logo = p.brand_logo_url;
+      if (p.brand_logo_url && p.brand_logo_url !== '/recurso.png')
+        map.brand_logo = p.brand_logo_url;
       if (p.brand_color_primary) map.color_primary = p.brand_color_primary;
       if (p.brand_color_secondary) map.color_secondary = p.brand_color_secondary;
       if (p.smtp_host) map.smtp_host = p.smtp_host;
@@ -975,7 +1113,8 @@ export async function getSettings(): Promise<Record<string, string>> {
     console.error('Error fetching settings:', err);
     return {
       brand_name: 'ContractCloud',
-      brand_logo: 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
+      brand_logo:
+        'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
       color_primary: '#0066FF',
       color_secondary: '#00F0FF',
       smtp_host: process.env.SMTP_HOST || 'mail.press-cloud.com',
@@ -1030,18 +1169,13 @@ export async function updateSettings(settings: Record<string, string>) {
 // PAYMENT METHODS MANAGEMENT
 // ==========================================
 
-
 export async function getPaymentMethods(targetUserId?: string): Promise<PaymentMethodConfig[]> {
   try {
     const cur = targetUserId ? { id: targetUserId } : await getCurrentUser();
     const userId = cur?.id;
     const key = userId ? `payment_methods_${userId}` : 'payment_methods_global';
 
-    const { data } = await supabaseAdmin
-      .from('settings')
-      .select('value')
-      .eq('key', key)
-      .single();
+    const { data } = await supabaseAdmin.from('settings').select('value').eq('key', key).single();
 
     if (data?.value) {
       try {
@@ -1081,16 +1215,22 @@ export async function savePaymentMethods(methods: PaymentMethodConfig[]) {
     const cur = await getCurrentUser();
     const key = cur?.id ? `payment_methods_${cur.id}` : 'payment_methods_global';
 
-    await supabaseAdmin.from('settings').upsert({
-      key,
-      value: JSON.stringify(methods)
-    }, { onConflict: 'key' });
+    await supabaseAdmin.from('settings').upsert(
+      {
+        key,
+        value: JSON.stringify(methods)
+      },
+      { onConflict: 'key' }
+    );
 
     if (!cur || cur.role === 'admin') {
-      await supabaseAdmin.from('settings').upsert({
-        key: 'payment_methods_global',
-        value: JSON.stringify(methods)
-      }, { onConflict: 'key' });
+      await supabaseAdmin.from('settings').upsert(
+        {
+          key: 'payment_methods_global',
+          value: JSON.stringify(methods)
+        },
+        { onConflict: 'key' }
+      );
     }
 
     revalidatePath('/dashboard');
@@ -1105,7 +1245,9 @@ export async function savePaymentMethods(methods: PaymentMethodConfig[]) {
 // EMAIL SENDING
 // ==========================================
 
-export async function sendTestEmail(recipientEmail: string): Promise<{ success: boolean; error?: string }> {
+export async function sendTestEmail(
+  recipientEmail: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const settings = await getSettings();
     const host = settings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
@@ -1113,10 +1255,16 @@ export async function sendTestEmail(recipientEmail: string): Promise<{ success: 
     const port = parseInt(portStr);
     const user = settings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
     const pass = settings.smtp_pass || process.env.SMTP_PASS || '';
-    const from = process.env.SMTP_FROM || settings.smtp_from || `"${settings.brand_name || 'ContractCloud'}" <${user}>`;
+    const from =
+      process.env.SMTP_FROM ||
+      settings.smtp_from ||
+      `"${settings.brand_name || 'ContractCloud'}" <${user}>`;
 
     if (!host || !user) {
-      return { success: false, error: 'Servidor SMTP no configurado. Completa el host y usuario en Ajustes.' };
+      return {
+        success: false,
+        error: 'Servidor SMTP no configurado. Completa el host y usuario en Ajustes.'
+      };
     }
 
     const transporter = nodemailer.createTransport({
@@ -1161,7 +1309,10 @@ export async function sendTestEmail(recipientEmail: string): Promise<{ success: 
   }
 }
 
-export async function sendProposalEmail(proposalId: string, recipientEmail: string): Promise<{ success: boolean; error?: string }> {
+export async function sendProposalEmail(
+  proposalId: string,
+  recipientEmail: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const [{ proposal, creatorProfile }, globalSettings] = await Promise.all([
       getProposalById(proposalId),
@@ -1173,17 +1324,38 @@ export async function sendProposalEmail(proposalId: string, recipientEmail: stri
     }
 
     // Tenant-aware SMTP credentials & branding
-    const host = creatorProfile?.smtp_host || globalSettings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
-    const portStr = creatorProfile?.smtp_port || globalSettings.smtp_port || process.env.SMTP_PORT || '465';
+    const host =
+      creatorProfile?.smtp_host ||
+      globalSettings.smtp_host ||
+      process.env.SMTP_HOST ||
+      'mail.press-cloud.com';
+    const portStr =
+      creatorProfile?.smtp_port || globalSettings.smtp_port || process.env.SMTP_PORT || '465';
     const port = parseInt(portStr);
-    const user = creatorProfile?.smtp_user || globalSettings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
-    const pass = creatorProfile?.smtp_pass || globalSettings.smtp_pass || process.env.SMTP_PASS || '';
+    const user =
+      creatorProfile?.smtp_user ||
+      globalSettings.smtp_user ||
+      process.env.SMTP_USER ||
+      'contract@press-cloud.com';
+    const pass =
+      creatorProfile?.smtp_pass || globalSettings.smtp_pass || process.env.SMTP_PASS || '';
     const brandName = creatorProfile?.tenant_name || globalSettings.brand_name || 'ContractCloud';
-    const primaryColor = proposal.brand_color_primary || creatorProfile?.brand_color_primary || globalSettings.color_primary || '#0066FF';
-    const from = creatorProfile?.smtp_from || globalSettings.smtp_from || process.env.SMTP_FROM || `"${brandName}" <${user}>`;
+    const primaryColor =
+      proposal.brand_color_primary ||
+      creatorProfile?.brand_color_primary ||
+      globalSettings.color_primary ||
+      '#0066FF';
+    const from =
+      creatorProfile?.smtp_from ||
+      globalSettings.smtp_from ||
+      process.env.SMTP_FROM ||
+      `"${brandName}" <${user}>`;
 
     if (!host || !user) {
-      return { success: false, error: 'Servidor SMTP no configurado. Completa las credenciales en Ajustes.' };
+      return {
+        success: false,
+        error: 'Servidor SMTP no configurado. Completa las credenciales en Ajustes.'
+      };
     }
 
     const transporter = nodemailer.createTransport({
@@ -1274,17 +1446,38 @@ export async function sendRenewalEmail(data: {
       return { success: false, error: 'Propuesta no encontrada' };
     }
 
-    const host = creatorProfile?.smtp_host || globalSettings.smtp_host || process.env.SMTP_HOST || 'mail.press-cloud.com';
-    const portStr = creatorProfile?.smtp_port || globalSettings.smtp_port || process.env.SMTP_PORT || '465';
+    const host =
+      creatorProfile?.smtp_host ||
+      globalSettings.smtp_host ||
+      process.env.SMTP_HOST ||
+      'mail.press-cloud.com';
+    const portStr =
+      creatorProfile?.smtp_port || globalSettings.smtp_port || process.env.SMTP_PORT || '465';
     const port = parseInt(portStr);
-    const user = creatorProfile?.smtp_user || globalSettings.smtp_user || process.env.SMTP_USER || 'contract@press-cloud.com';
-    const pass = creatorProfile?.smtp_pass || globalSettings.smtp_pass || process.env.SMTP_PASS || '';
+    const user =
+      creatorProfile?.smtp_user ||
+      globalSettings.smtp_user ||
+      process.env.SMTP_USER ||
+      'contract@press-cloud.com';
+    const pass =
+      creatorProfile?.smtp_pass || globalSettings.smtp_pass || process.env.SMTP_PASS || '';
     const brandName = creatorProfile?.tenant_name || globalSettings.brand_name || 'ContractCloud';
-    const primaryColor = proposal.brand_color_primary || creatorProfile?.brand_color_primary || globalSettings.color_primary || '#0066FF';
-    const from = creatorProfile?.smtp_from || globalSettings.smtp_from || process.env.SMTP_FROM || `"${brandName}" <${user}>`;
+    const primaryColor =
+      proposal.brand_color_primary ||
+      creatorProfile?.brand_color_primary ||
+      globalSettings.color_primary ||
+      '#0066FF';
+    const from =
+      creatorProfile?.smtp_from ||
+      globalSettings.smtp_from ||
+      process.env.SMTP_FROM ||
+      `"${brandName}" <${user}>`;
 
     if (!host || !user) {
-      return { success: false, error: 'Servidor SMTP no configurado. Completa las credenciales en Ajustes.' };
+      return {
+        success: false,
+        error: 'Servidor SMTP no configurado. Completa las credenciales en Ajustes.'
+      };
     }
 
     const transporter = nodemailer.createTransport({
