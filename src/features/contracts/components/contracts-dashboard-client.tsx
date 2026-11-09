@@ -21,7 +21,8 @@ import {
   sendProposalEmail,
   getProposalById,
   uploadAsset,
-  savePaymentMethods
+  savePaymentMethods,
+  duplicateProposal
 } from '@/lib/actions';
 import { DEFAULT_PAYMENT_METHODS } from '@/lib/constants/payment-methods';
 import type {
@@ -243,6 +244,33 @@ export function ContractsDashboardClient({
   // ==========================================
   // HANDLERS: PROPOSALS
   // ==========================================
+
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+
+  const handleDuplicateProposal = async (id: string, clientName: string) => {
+    if (
+      !confirm(
+        `¿Deseas duplicar la propuesta de "${clientName}"? Se creará una copia idéntica editable con estado pendiente.`
+      )
+    ) {
+      return;
+    }
+
+    setDuplicatingId(id);
+    try {
+      const res = await duplicateProposal(id);
+      if (res.success) {
+        toast.success('Propuesta duplicada exitosamente');
+        router.refresh();
+      } else {
+        toast.error('No se pudo duplicar la propuesta');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error al duplicar propuesta');
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
 
   const handleDeleteProposal = (id: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar esta propuesta y todos sus registros?')) {
@@ -1253,6 +1281,34 @@ export function ContractsDashboardClient({
                                   <Icons.eye className='h-4 w-4' />
                                 </Button>
 
+                                {/* Editar Propuesta */}
+                                <Link href={`/dashboard/propuestas/${prop.id}/editar`}>
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    className='h-8 w-8 p-0 cursor-pointer text-amber-500 hover:text-amber-400'
+                                    title='Editar Propuesta'
+                                  >
+                                    <Icons.edit className='h-4 w-4' />
+                                  </Button>
+                                </Link>
+
+                                {/* Duplicar Propuesta */}
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  disabled={duplicatingId === prop.id}
+                                  onClick={() => handleDuplicateProposal(prop.id, prop.client_name)}
+                                  className='h-8 w-8 p-0 cursor-pointer text-teal-500 hover:text-teal-400'
+                                  title='Duplicar / Clonar Propuesta'
+                                >
+                                  {duplicatingId === prop.id ? (
+                                    <Icons.spinner className='h-4 w-4 animate-spin' />
+                                  ) : (
+                                    <Icons.copyPlus className='h-4 w-4' />
+                                  )}
+                                </Button>
+
                                 {/* Enviar por Correo */}
                                 <Button
                                   variant='ghost'
@@ -2177,6 +2233,24 @@ export function ContractsDashboardClient({
                   </div>
                 </div>
               ) : null}
+
+              {/* Botón de edición rápida */}
+              <div className='flex items-center justify-end gap-2 pt-4 border-t border-border/40'>
+                <Link href={`/dashboard/propuestas/${detailedProposal.proposal.id}/editar`}>
+                  <Button variant='outline' size='sm' className='gap-2 cursor-pointer'>
+                    <Icons.edit className='h-4 w-4 text-amber-500' />
+                    Editar Propuesta
+                  </Button>
+                </Link>
+                <Button
+                  variant='secondary'
+                  size='sm'
+                  onClick={() => setDetailsModalOpen(false)}
+                  className='cursor-pointer'
+                >
+                  Cerrar
+                </Button>
+              </div>
             </div>
           ) : null}
         </DialogContent>

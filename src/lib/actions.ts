@@ -591,6 +591,260 @@ export async function deleteProposal(id: string) {
   }
 }
 
+export async function updateProposal(
+  id: string,
+  data: {
+    client_name: string;
+    client_company: string;
+    client_domain?: string;
+    client_email?: string;
+    invoice_number: string;
+    payment_status: string;
+    payment_date?: string;
+    payment_method?: string;
+    payment_amount?: number;
+    brand_color_primary?: string;
+    brand_color_secondary?: string;
+    brand_logo_url?: string;
+    grace_days?: number;
+    late_fee_percentage?: number;
+    daily_penalty_fee?: number;
+    reset_signature?: boolean;
+    services: ProposalService[];
+    credentials?: Credential[];
+    payments?: ProposalPayment[];
+    collaborators?: ProposalCollaborator[];
+  }
+) {
+  try {
+    const cur = await getCurrentUser();
+    const tenantProf = cur?.profile;
+
+    const totalAmount = data.services.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
+    const firstService = data.services[0];
+
+    const brandLogo =
+      data.brand_logo_url && data.brand_logo_url !== '/recurso.png'
+        ? data.brand_logo_url
+        : tenantProf?.brand_logo_url ||
+          'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+
+    const brandPrimary = data.brand_color_primary || tenantProf?.brand_color_primary || '#0066FF';
+    const brandSecondary =
+      data.brand_color_secondary || tenantProf?.brand_color_secondary || '#00F0FF';
+
+    const hasRecurrent = data.services.some((s) => s.billing_type === 'RECURRENT');
+    const hasOneTime = data.services.some((s) => s.billing_type === 'ONE_TIME');
+    const recurrentService = data.services.find((s) => s.billing_type === 'RECURRENT');
+
+    let calculatedDuration = 'Pago Único';
+    if (hasRecurrent && hasOneTime) {
+      calculatedDuration = 'Mixto (Setup + Recurrente)';
+    } else if (hasRecurrent) {
+      calculatedDuration = recurrentService?.billing_cycle || 'Recurrente';
+    }
+
+    const calculatedStartDate =
+      data.services[0]?.start_date || new Date().toISOString().split('T')[0];
+    const calculatedExpiration = recurrentService?.expiration_date || null;
+
+    const updatePayload: any = {
+      client_name: data.client_name,
+      client_company: data.client_company,
+      client_domain: data.client_domain || '',
+      client_email: data.client_email || '',
+      service_name: firstService ? firstService.service_name : '',
+      plan_name: firstService ? firstService.plan_name : '',
+      start_date: calculatedStartDate,
+      duration: calculatedDuration,
+      service_expiration: calculatedExpiration,
+      category_name: firstService ? firstService.category_name : '',
+      features: firstService ? firstService.features : '',
+      price: totalAmount,
+      invoice_number: data.invoice_number,
+      payment_status: data.payment_status || 'PENDIENTE',
+      payment_date: data.payment_date || new Date().toISOString().split('T')[0],
+      payment_method: data.payment_method || 'Transferencia',
+      payment_amount: data.payment_amount || 0,
+      brand_color_primary: brandPrimary,
+      brand_color_secondary: brandSecondary,
+      brand_logo_url: brandLogo,
+      grace_days: data.grace_days || 0,
+      late_fee_percentage: data.late_fee_percentage || 0,
+      daily_penalty_fee: data.daily_penalty_fee || 0
+    };
+
+    if (data.reset_signature) {
+      updatePayload.signature_image = null;
+      updatePayload.signature_date = null;
+    }
+
+    const { error: pError } = await supabaseAdmin
+      .from('proposals')
+      .update(updatePayload)
+      .eq('id', id);
+
+    if (pError) throw pError;
+
+    // Sincronizar Servicios
+    await supabaseAdmin.from('proposal_services').delete().eq('proposal_id', id);
+    if (data.services && data.services.length > 0) {
+      const servicesToInsert = data.services.map((s, idx) => ({
+        id: s.id && !s.id.startsWith('new-') ? s.id : `${id}-srv-${idx + 1}`,
+        proposal_id: id,
+        category_name: s.category_name || '',
+        service_name: s.service_name || '',
+        plan_name: s.plan_name || '',
+        price: Number(s.price) || 0,
+        billing_type: s.billing_type || 'RECURRENT',
+        billing_cycle: s.billing_cycle || 'Anual',
+        features: s.features || '',
+        policies: s.policies || '',
+        status: s.status || 'ACTIVO',
+        start_date: s.start_date || new Date().toISOString().split('T')[0],
+        expiration_date: s.expiration_date || null,
+        suspension_date: s.suspension_date || null,
+        domain_included: s.domain_included ? 1 : 0,
+        domain_expiration: s.domain_expiration || null
+      }));
+      const { error: sError } = await supabaseAdmin
+        .from('proposal_services')
+        .insert(servicesToInsert);
+      if (sError) throw sError;
+    }
+
+    // Sincronizar Credenciales
+    await supabaseAdmin.from('credentials').delete().eq('proposal_id', id);
+    if (data.credentials && data.credentials.length > 0) {
+      const credsToInsert = data.credentials
+        .filter((c) => c.description?.trim())
+        .map((c) => ({
+          proposal_id: id,
+          description: c.description,
+          email: c.email || '',
+          password: c.password || '',
+          notes: c.notes || '',
+          dynamic_fields: c.dynamic_fields || ''
+        }));
+      if (credsToInsert.length > 0) {
+        const { error: cError } = await supabaseAdmin.from('credentials').insert(credsToInsert);
+        if (cError) throw cError;
+      }
+    }
+
+    // Sincronizar Cuotas
+    await supabaseAdmin.from('proposal_payments').delete().eq('proposal_id', id);
+    if (data.payments && data.payments.length > 0) {
+      const paymentsToInsert = data.payments.map((pm, idx) => ({
+        id: pm.id && !pm.id.startsWith('new-') ? pm.id : `${id}-pay-${idx + 1}`,
+        proposal_id: id,
+        invoice_number: pm.invoice_number || data.invoice_number,
+        amount: Number(pm.amount) || 0,
+        payment_date:
+          pm.payment_date || (pm.status === 'PAGADO' ? new Date().toISOString().split('T')[0] : ''),
+        payment_method: pm.payment_method || data.payment_method || 'Transferencia',
+        description: pm.description || `Cuota #${idx + 1}`,
+        status: pm.status || 'PENDIENTE',
+        notes: pm.notes || '',
+        due_date: pm.due_date || ''
+      }));
+      const { error: payError } = await supabaseAdmin
+        .from('proposal_payments')
+        .insert(paymentsToInsert);
+      if (payError) throw payError;
+    }
+
+    // Sincronizar Colaboradores
+    await supabaseAdmin.from('proposal_collaborators').delete().eq('proposal_id', id);
+    if (data.collaborators && data.collaborators.length > 0) {
+      const collabToInsert = data.collaborators.map((cb, idx) => ({
+        id: cb.id && !cb.id.startsWith('new-') ? cb.id : `${id}-col-${idx + 1}`,
+        proposal_id: id,
+        name: cb.name,
+        role: cb.role || 'Especialista',
+        logo_url: cb.logo_url || '',
+        contact: cb.contact || ''
+      }));
+      const { error: colError } = await supabaseAdmin
+        .from('proposal_collaborators')
+        .insert(collabToInsert);
+      if (colError) throw colError;
+    }
+
+    revalidatePath('/dashboard');
+    revalidatePath(`/p/${id}`);
+    return { success: true, id };
+  } catch (err: any) {
+    console.error('Error updating proposal:', err);
+    throw new Error(err.message || 'Error al actualizar la propuesta');
+  }
+}
+
+export async function duplicateProposal(id: string): Promise<{ success: boolean; id: string }> {
+  try {
+    const { proposal, services, credentials, payments, collaborators } = await getProposalById(id);
+    if (!proposal) throw new Error('Propuesta no encontrada');
+
+    const newId = `prop-${Date.now()}`;
+    const newInvoiceNumber = `${proposal.invoice_number}-COPIA`;
+
+    const clonedServices = services.map((s, idx) => ({
+      ...s,
+      id: `${newId}-srv-${idx + 1}`,
+      proposal_id: newId
+    }));
+
+    const clonedCredentials = credentials.map((c) => ({
+      ...c,
+      id: undefined,
+      proposal_id: newId
+    }));
+
+    const clonedPayments = payments.map((pm, idx) => ({
+      ...pm,
+      id: `${newId}-pay-${idx + 1}`,
+      proposal_id: newId,
+      invoice_number: newInvoiceNumber,
+      status: 'PENDIENTE' as const,
+      payment_date: ''
+    }));
+
+    const clonedCollaborators = collaborators.map((cb, idx) => ({
+      ...cb,
+      id: `${newId}-col-${idx + 1}`,
+      proposal_id: newId
+    }));
+
+    await createProposal({
+      id: newId,
+      client_name: `${proposal.client_name} (Copia)`,
+      client_company: proposal.client_company,
+      client_domain: proposal.client_domain || '',
+      client_email: proposal.client_email || '',
+      invoice_number: newInvoiceNumber,
+      payment_status: 'PENDIENTE',
+      payment_method: proposal.payment_method || 'Transferencia',
+      payment_amount: 0,
+      brand_color_primary: proposal.brand_color_primary,
+      brand_color_secondary: proposal.brand_color_secondary,
+      brand_logo_url: proposal.brand_logo_url,
+      grace_days: proposal.grace_days,
+      late_fee_percentage: proposal.late_fee_percentage,
+      daily_penalty_fee: proposal.daily_penalty_fee,
+      services: clonedServices,
+      credentials: clonedCredentials,
+      payments: clonedPayments,
+      collaborators: clonedCollaborators
+    });
+
+    revalidatePath('/dashboard');
+    return { success: true, id: newId };
+  } catch (err: any) {
+    console.error('Error duplicating proposal:', err);
+    throw new Error(err.message || 'Error al duplicar la propuesta');
+  }
+}
+
 export async function registerPayment(data: {
   proposal_id: string;
   amount: number;

@@ -156,16 +156,18 @@ export const contractsDashboardSteps: DriveStep[] = [
   {
     element: '#first-row-actions, #actions-column-tour',
     popover: {
-      title: '⚡ 7 Acciones Clave por Contrato',
+      title: '⚡ Acciones Operativas por Contrato',
       description:
-        'Cada contrato cuenta con herramientas operativas rápidas:<br><br>' +
+        'Cada contrato cuenta con una suite completa de herramientas rápidas:<br><br>' +
         '1. <b>🌐 Abrir Portal:</b> Abre la vista interactiva del cliente (<code>/p/[id]</code>).<br>' +
         '2. <b>🔄 Renovar Período:</b> Genera el siguiente ciclo recurrente con monto exacto.<br>' +
-        '3. <b>💳 Registrar Pago:</b> Cobra cuotas o renovaciones para volver a estado <b>VIGENTE</b>.<br>' +
-        '4. <b>👁️ Ver Detalles:</b> Desglose de servicios, pagos y credenciales seguras.<br>' +
-        '5. <b>✉️ Enviar Correo:</b> Envía el contrato directo al cliente vía SMTP.<br>' +
-        '6. <b>📋 Copiar Enlace:</b> Copia el link para enviarlo por WhatsApp o chat.<br>' +
-        '7. <b>🗑️ Eliminar:</b> Borra el contrato tras confirmación de seguridad.',
+        '3. <b>💳 Registrar Pago:</b> Cobra cuotas o abonos para mantener el estado vigente.<br>' +
+        '4. <b>👁️ Ver Detalles:</b> Desglose de servicios, cuotas, firma y credenciales.<br>' +
+        '5. <b>✏️ Editar Propuesta:</b> Modifica datos del cliente, servicios, cuotas o políticas.<br>' +
+        '6. <b>📑 Duplicar:</b> Clona la propuesta completa para emitir una nueva en 1 clic.<br>' +
+        '7. <b>✉️ Enviar Correo:</b> Envía el contrato directo al cliente vía email/SMTP.<br>' +
+        '8. <b>📋 Copiar Enlace:</b> Copia el link público para WhatsApp o mensaje.<br>' +
+        '9. <b>🗑️ Eliminar:</b> Borra el contrato tras confirmación de seguridad.',
       side: 'left',
       align: 'center'
     }
