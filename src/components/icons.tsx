@@ -55,6 +55,7 @@ import {
   IconLock,
   IconLogin,
   IconLogout,
+  IconMail,
   IconMessage,
   IconMinus,
   IconMoon,
@@ -148,6 +149,7 @@ export const Icons = {
   logo: IconCommand,
 
   // Communication
+  mail: IconMail,
   chat: IconMessage,
   notification: IconBell,
   phone: IconPhone,

@@ -1886,30 +1886,30 @@ export function ContractsDashboardClient({
                 <CardContent className='space-y-2.5 text-xs text-muted-foreground flex-1'>
                   <div className='p-3 rounded-lg bg-muted/40 border border-border/50 space-y-1.5'>
                     {pm.account_email && (
-                      <div className='flex justify-between gap-2'>
-                        <span className='text-foreground/70'>Correo:</span>
-                        <span className='font-mono font-medium text-foreground truncate max-w-[170px]'>
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-foreground/70 shrink-0'>Correo:</span>
+                        <span className='font-mono font-medium text-foreground break-all text-right'>
                           {pm.account_email}
                         </span>
                       </div>
                     )}
                     {pm.account_holder && (
-                      <div className='flex justify-between gap-2'>
-                        <span className='text-foreground/70'>Titular:</span>
-                        <span className='font-medium text-foreground truncate max-w-[170px]'>
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-foreground/70 shrink-0'>Titular:</span>
+                        <span className='font-medium text-foreground text-right'>
                           {pm.account_holder}
                         </span>
                       </div>
                     )}
                     {pm.binance_id && (
-                      <div className='flex justify-between gap-2'>
-                        <span className='text-foreground/70'>Pay ID:</span>
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-foreground/70 shrink-0'>Pay ID:</span>
                         <span className='font-mono font-bold text-amber-500'>{pm.binance_id}</span>
                       </div>
                     )}
                     {pm.network && (
-                      <div className='flex justify-between gap-2'>
-                        <span className='text-foreground/70'>Red:</span>
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-foreground/70 shrink-0'>Red:</span>
                         <span className='font-semibold text-foreground'>{pm.network}</span>
                       </div>
                     )}
@@ -1922,15 +1922,17 @@ export function ContractsDashboardClient({
                       </div>
                     )}
                     {pm.bank_name && (
-                      <div className='flex justify-between gap-2'>
-                        <span className='text-foreground/70'>Banco:</span>
-                        <span className='font-medium text-foreground'>{pm.bank_name}</span>
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-foreground/70 shrink-0'>Banco:</span>
+                        <span className='font-medium text-foreground text-right'>
+                          {pm.bank_name}
+                        </span>
                       </div>
                     )}
                     {pm.account_number && (
-                      <div className='flex justify-between gap-2'>
-                        <span className='text-foreground/70'>Cuenta:</span>
-                        <span className='font-mono font-medium text-foreground truncate max-w-[160px]'>
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-foreground/70 shrink-0'>Cuenta:</span>
+                        <span className='font-mono font-medium text-foreground break-all text-right'>
                           {pm.account_number}
                         </span>
                       </div>

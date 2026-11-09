@@ -53,159 +53,422 @@ function PaymentMethodsGrid({
   methods: PaymentMethodConfig[];
   copyToClipboard: (text: string, label: string) => void;
 }) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   if (methods.length === 0) return null;
+
+  const handleCopy = (text: string, label: string, key: string) => {
+    copyToClipboard(text, label);
+    setCopiedKey(key);
+    setTimeout(() => {
+      setCopiedKey((curr) => (curr === key ? null : curr));
+    }, 2000);
+  };
+
+  const getCardTheme = (type: string) => {
+    switch (type) {
+      case 'zelle':
+        return {
+          topBorder: 'border-t-4 border-t-purple-600',
+          badgeBg: 'bg-purple-100 text-purple-900 border-purple-200/80',
+          badgeText: 'Transferencia USA',
+          iconBg:
+            'bg-gradient-to-br from-purple-900 to-slate-950 border-purple-800/60 shadow-purple-950/20',
+          boxBorder: 'hover:border-purple-300',
+          btnCopy: 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200/60',
+          highlightText: 'text-purple-700',
+          infoBox: 'bg-purple-50/70 border-purple-100/90 text-purple-950',
+          infoIcon: 'text-purple-600'
+        };
+      case 'binance':
+        return {
+          topBorder: 'border-t-4 border-t-amber-500',
+          badgeBg: 'bg-amber-100 text-amber-950 border-amber-200/80',
+          badgeText: 'Cripto / Web3',
+          iconBg:
+            'bg-gradient-to-br from-amber-950 to-slate-950 border-amber-800/60 shadow-amber-950/20',
+          boxBorder: 'hover:border-amber-300',
+          btnCopy: 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200/60',
+          highlightText: 'text-amber-600',
+          infoBox: 'bg-amber-50/70 border-amber-100/90 text-amber-950',
+          infoIcon: 'text-amber-600'
+        };
+      case 'bank_transfer':
+        return {
+          topBorder: 'border-t-4 border-t-sky-600',
+          badgeBg: 'bg-sky-100 text-sky-900 border-sky-200/80',
+          badgeText: 'Banca Tradicional',
+          iconBg: 'bg-gradient-to-br from-sky-950 to-slate-950 border-sky-800/60 shadow-sky-950/20',
+          boxBorder: 'hover:border-sky-300',
+          btnCopy: 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200/60',
+          highlightText: 'text-sky-700',
+          infoBox: 'bg-sky-50/70 border-sky-100/90 text-sky-950',
+          infoIcon: 'text-sky-600'
+        };
+      default:
+        return {
+          topBorder: 'border-t-4 border-t-slate-700',
+          badgeBg: 'bg-slate-100 text-slate-800 border-slate-200',
+          badgeText: 'Pago Digital',
+          iconBg: 'bg-slate-950 border-slate-800',
+          boxBorder: 'hover:border-slate-300',
+          btnCopy: 'bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200',
+          highlightText: 'text-slate-900',
+          infoBox: 'bg-slate-50 border-slate-200 text-slate-800',
+          infoIcon: 'text-slate-600'
+        };
+    }
+  };
 
   return (
     <section className='space-y-4'>
-      <div className='flex items-center justify-between'>
-        <h2 className='text-lg font-bold text-slate-900 flex items-center gap-2'>
-          <Icons.creditCard className='h-5 w-5 text-orange-600' />
-          <span>Canales y Cuentas Habilitadas para Pagos</span>
-        </h2>
-        <span className='text-xs text-slate-500 hidden sm:inline'>
-          Transfiere y reporta tu comprobante
+      <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/80'>
+        <div className='flex items-center gap-2.5'>
+          <div className='p-2 bg-orange-100 text-orange-600 rounded-xl shadow-xs'>
+            <Icons.creditCard className='h-5 w-5' />
+          </div>
+          <div>
+            <h2 className='text-lg font-bold text-slate-900'>
+              Canales y Cuentas Habilitadas para Pagos
+            </h2>
+            <p className='text-xs text-slate-500'>
+              Datos completos para realizar transferencias directas o pagos digitales
+            </p>
+          </div>
+        </div>
+        <span className='inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60 w-fit self-start sm:self-auto shadow-2xs'>
+          <span className='w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse' />
+          Cuentas Verificadas
         </span>
       </div>
 
-      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-        {methods.map((pm) => (
-          <div
-            key={pm.id}
-            className='bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-slate-300 transition-all flex flex-col justify-between space-y-3'
-          >
-            <div className='space-y-3'>
-              <div className='flex items-center gap-3'>
-                <div className='w-10 h-10 rounded-xl bg-slate-950 p-1.5 flex items-center justify-center shrink-0 border border-slate-800 shadow-inner'>
-                  <img
-                    src={pm.logo_url}
-                    alt={pm.name}
-                    className='max-h-full max-w-full object-contain'
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/logos/bank.svg';
-                    }}
-                  />
+      <div className='grid gap-5 sm:grid-cols-2 lg:grid-cols-3'>
+        {methods.map((pm) => {
+          const theme = getCardTheme(pm.type);
+
+          return (
+            <div
+              key={pm.id}
+              className={`bg-white border border-slate-200/90 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden ${theme.topBorder}`}
+            >
+              <div className='p-5 space-y-4 flex-1 flex flex-col justify-between'>
+                {/* Header del Método */}
+                <div className='space-y-3'>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div className='flex items-center gap-3'>
+                      <div
+                        className={`w-12 h-12 rounded-xl p-2 flex items-center justify-center shrink-0 border shadow-inner ${theme.iconBg}`}
+                      >
+                        <img
+                          src={pm.logo_url}
+                          alt={pm.name}
+                          className='max-h-full max-w-full object-contain'
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = '/logos/bank.svg';
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <h4 className='font-black text-base text-slate-900 tracking-tight leading-tight'>
+                          {pm.name}
+                        </h4>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase border mt-1 ${theme.badgeBg}`}
+                        >
+                          {theme.badgeText}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bloques de Datos Completos (Sin cortes ni truncados) */}
+                  <div className='space-y-2.5 pt-1'>
+                    {/* Correo Electrónico (Zelle u otros) */}
+                    {pm.account_email && (
+                      <div
+                        className={`rounded-xl p-3 bg-slate-50/70 border border-slate-200/90 transition-all ${theme.boxBorder}`}
+                      >
+                        <div className='flex items-center justify-between gap-1 mb-1.5'>
+                          <span className='text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1'>
+                            <Icons.mail className='h-3 w-3 text-slate-400' />
+                            Correo Electrónico
+                          </span>
+                          <button
+                            type='button'
+                            onClick={() =>
+                              handleCopy(pm.account_email!, 'Correo electrónico', `${pm.id}-email`)
+                            }
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer border ${
+                              copiedKey === `${pm.id}-email`
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                : `${theme.btnCopy}`
+                            }`}
+                            title='Copiar correo completo'
+                          >
+                            {copiedKey === `${pm.id}-email` ? (
+                              <>
+                                <Icons.check className='h-3.5 w-3.5 stroke-[2.5]' />
+                                <span>¡Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Icons.copy className='h-3 w-3' />
+                                <span>Copiar</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleCopy(pm.account_email!, 'Correo electrónico', `${pm.id}-email`)
+                          }
+                          className='font-mono font-bold text-slate-900 text-xs sm:text-[13px] break-all select-all cursor-pointer hover:opacity-80 transition-opacity leading-snug'
+                        >
+                          {pm.account_email}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Número de Cuenta Bancaria */}
+                    {pm.account_number && (
+                      <div
+                        className={`rounded-xl p-3 bg-slate-50/70 border border-slate-200/90 transition-all ${theme.boxBorder}`}
+                      >
+                        <div className='flex items-center justify-between gap-1 mb-1.5'>
+                          <span className='text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1'>
+                            <Icons.creditCard className='h-3 w-3 text-slate-400' />
+                            Nº de Cuenta (Completo)
+                          </span>
+                          <button
+                            type='button'
+                            onClick={() =>
+                              handleCopy(pm.account_number!, 'Número de cuenta', `${pm.id}-acc`)
+                            }
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer border ${
+                              copiedKey === `${pm.id}-acc`
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                : `${theme.btnCopy}`
+                            }`}
+                            title='Copiar número de cuenta completo'
+                          >
+                            {copiedKey === `${pm.id}-acc` ? (
+                              <>
+                                <Icons.check className='h-3.5 w-3.5 stroke-[2.5]' />
+                                <span>¡Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Icons.copy className='h-3 w-3' />
+                                <span>Copiar Cuenta</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleCopy(pm.account_number!, 'Número de cuenta', `${pm.id}-acc`)
+                          }
+                          className='font-mono font-bold text-slate-900 text-xs sm:text-[13px] break-all select-all cursor-pointer hover:opacity-80 transition-opacity leading-snug tracking-wide'
+                        >
+                          {pm.account_number}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Binance Pay ID */}
+                    {pm.binance_id && (
+                      <div className='rounded-xl p-3 bg-amber-50/80 border border-amber-200 shadow-2xs hover:border-amber-400 transition-all'>
+                        <div className='flex items-center justify-between gap-1 mb-1.5'>
+                          <span className='text-[10px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1'>
+                            <Icons.sparkles className='h-3 w-3 text-amber-600' />
+                            Binance Pay ID
+                          </span>
+                          <button
+                            type='button'
+                            onClick={() =>
+                              handleCopy(pm.binance_id!, 'Binance Pay ID', `${pm.id}-payid`)
+                            }
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer border ${
+                              copiedKey === `${pm.id}-payid`
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                : 'bg-amber-100 hover:bg-amber-200 text-amber-950 border-amber-300'
+                            }`}
+                            title='Copiar Pay ID'
+                          >
+                            {copiedKey === `${pm.id}-payid` ? (
+                              <>
+                                <Icons.check className='h-3.5 w-3.5 stroke-[2.5]' />
+                                <span>¡Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Icons.copy className='h-3 w-3' />
+                                <span>Copiar ID</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleCopy(pm.binance_id!, 'Binance Pay ID', `${pm.id}-payid`)
+                          }
+                          className='font-mono font-black text-amber-600 text-sm sm:text-base tracking-wider select-all cursor-pointer hover:text-amber-700 transition-colors'
+                        >
+                          {pm.binance_id}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dirección de Billetera USDT / Cripto */}
+                    {pm.wallet_address && (
+                      <div
+                        className={`rounded-xl p-3 bg-slate-50/70 border border-slate-200/90 transition-all ${theme.boxBorder}`}
+                      >
+                        <div className='flex items-center justify-between gap-1 mb-1.5'>
+                          <span className='text-[10px] font-bold uppercase tracking-wider text-slate-500'>
+                            {pm.wallet_address.includes('@')
+                              ? 'Cuenta / Correo Binance'
+                              : 'Billetera / Wallet Address'}
+                          </span>
+                          <button
+                            type='button'
+                            onClick={() =>
+                              handleCopy(
+                                pm.wallet_address!,
+                                'Dirección o cuenta',
+                                `${pm.id}-wallet`
+                              )
+                            }
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer border ${
+                              copiedKey === `${pm.id}-wallet`
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                : `${theme.btnCopy}`
+                            }`}
+                            title='Copiar dirección completa'
+                          >
+                            {copiedKey === `${pm.id}-wallet` ? (
+                              <>
+                                <Icons.check className='h-3.5 w-3.5 stroke-[2.5]' />
+                                <span>¡Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Icons.copy className='h-3 w-3' />
+                                <span>Copiar</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div
+                          onClick={() =>
+                            handleCopy(pm.wallet_address!, 'Dirección o cuenta', `${pm.id}-wallet`)
+                          }
+                          className='font-mono font-bold text-slate-900 text-xs sm:text-[13px] break-all select-all cursor-pointer hover:opacity-80 transition-opacity leading-snug'
+                        >
+                          {pm.wallet_address}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Filas de Información Descriptiva (Banco, Titular, Doc/RIF, Red) */}
+                    <div className='bg-slate-50/90 rounded-xl p-3 border border-slate-200/70 space-y-2 text-xs'>
+                      {pm.bank_name && (
+                        <div className='flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200/60'>
+                          <span className='text-slate-500 font-medium'>Banco:</span>
+                          <span className='font-bold text-slate-900 text-right'>
+                            {pm.bank_name}
+                          </span>
+                        </div>
+                      )}
+
+                      {pm.account_holder && (
+                        <div className='flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200/60 last:border-b-0 last:pb-0'>
+                          <span className='text-slate-500 font-medium'>Titular:</span>
+                          <span className='font-bold text-slate-900 text-right'>
+                            {pm.account_holder}
+                          </span>
+                        </div>
+                      )}
+
+                      {pm.network && (
+                        <div className='flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200/60 last:border-b-0 last:pb-0'>
+                          <span className='text-slate-500 font-medium'>Red Cripto:</span>
+                          <span className='font-bold text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200/70'>
+                            {pm.network}
+                          </span>
+                        </div>
+                      )}
+
+                      {pm.routing_number && (
+                        <div className='flex items-center justify-between gap-2 pt-0.5'>
+                          <span className='text-slate-500 font-medium'>Doc / RIF:</span>
+                          <div className='flex items-center gap-1.5 font-mono font-bold text-slate-900'>
+                            <span>{pm.routing_number}</span>
+                            <button
+                              type='button'
+                              onClick={() =>
+                                handleCopy(pm.routing_number!, 'Doc / RIF', `${pm.id}-rif`)
+                              }
+                              className={`p-1 rounded transition-colors cursor-pointer ${
+                                copiedKey === `${pm.id}-rif`
+                                  ? 'text-emerald-600 bg-emerald-50'
+                                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200/60'
+                              }`}
+                              title='Copiar documento'
+                            >
+                              {copiedKey === `${pm.id}-rif` ? (
+                                <Icons.check className='h-3.5 w-3.5 stroke-[2.5]' />
+                              ) : (
+                                <Icons.copy className='h-3 w-3' />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {pm.phone_number && (
+                        <div className='flex items-center justify-between gap-2 pt-0.5'>
+                          <span className='text-slate-500 font-medium'>Teléfono:</span>
+                          <div className='flex items-center gap-1.5 font-mono font-bold text-slate-900'>
+                            <span>{pm.phone_number}</span>
+                            <button
+                              type='button'
+                              onClick={() =>
+                                handleCopy(pm.phone_number!, 'Teléfono', `${pm.id}-tel`)
+                              }
+                              className={`p-1 rounded transition-colors cursor-pointer ${
+                                copiedKey === `${pm.id}-tel`
+                                  ? 'text-emerald-600 bg-emerald-50'
+                                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-200/60'
+                              }`}
+                              title='Copiar teléfono'
+                            >
+                              {copiedKey === `${pm.id}-tel` ? (
+                                <Icons.check className='h-3.5 w-3.5 stroke-[2.5]' />
+                              ) : (
+                                <Icons.copy className='h-3 w-3' />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h4 className='font-bold text-sm text-slate-900'>{pm.name}</h4>
-                  <span className='text-[10px] font-semibold uppercase tracking-wider text-slate-400'>
-                    {pm.type === 'zelle'
-                      ? 'Transferencia USA'
-                      : pm.type === 'binance'
-                        ? 'Cripto / Web3'
-                        : pm.type === 'bank_transfer'
-                          ? 'Banca Tradicional'
-                          : 'Pago Digital'}
-                  </span>
-                </div>
-              </div>
 
-              <div className='space-y-1.5 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100'>
-                {pm.account_email && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-slate-500'>Correo:</span>
-                    <div className='flex items-center gap-1.5 font-mono font-medium text-slate-800'>
-                      <span className='truncate max-w-[140px]'>{pm.account_email}</span>
-                      <button
-                        type='button'
-                        onClick={() => copyToClipboard(pm.account_email!, 'Correo')}
-                        className='p-1 hover:bg-slate-200 rounded transition cursor-pointer text-slate-500 hover:text-slate-800'
-                        title='Copiar correo'
-                      >
-                        <Icons.copy className='h-3 w-3' />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {pm.account_holder && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-slate-500'>Titular:</span>
-                    <span className='font-medium text-slate-800 text-right truncate max-w-[150px]'>
-                      {pm.account_holder}
-                    </span>
-                  </div>
-                )}
-
-                {pm.binance_id && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-slate-500'>Pay ID:</span>
-                    <div className='flex items-center gap-1.5 font-mono font-bold text-amber-600'>
-                      <span>{pm.binance_id}</span>
-                      <button
-                        type='button'
-                        onClick={() => copyToClipboard(pm.binance_id!, 'Binance Pay ID')}
-                        className='p-1 hover:bg-slate-200 rounded transition cursor-pointer text-slate-500 hover:text-slate-800'
-                        title='Copiar ID'
-                      >
-                        <Icons.copy className='h-3 w-3' />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {pm.network && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-slate-500'>Red:</span>
-                    <span className='font-semibold text-slate-700'>{pm.network}</span>
-                  </div>
-                )}
-
-                {pm.wallet_address && (
-                  <div className='space-y-1 pt-1 border-t border-slate-200/60'>
-                    <div className='flex items-center justify-between'>
-                      <span className='text-slate-500 text-[11px]'>Billetera:</span>
-                      <button
-                        type='button'
-                        onClick={() => copyToClipboard(pm.wallet_address!, 'Dirección USDT')}
-                        className='text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-1 cursor-pointer'
-                      >
-                        <Icons.copy className='h-3 w-3' /> Copiar
-                      </button>
-                    </div>
-                    <p className='font-mono text-[10px] text-slate-600 break-all bg-white p-1.5 rounded border border-slate-200'>
-                      {pm.wallet_address}
-                    </p>
-                  </div>
-                )}
-
-                {pm.bank_name && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-slate-500'>Banco:</span>
-                    <span className='font-medium text-slate-800'>{pm.bank_name}</span>
-                  </div>
-                )}
-
-                {pm.account_number && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-slate-500'>Nº Cuenta:</span>
-                    <div className='flex items-center gap-1.5 font-mono font-medium text-slate-800'>
-                      <span className='truncate max-w-[130px]'>{pm.account_number}</span>
-                      <button
-                        type='button'
-                        onClick={() => copyToClipboard(pm.account_number!, 'Número de cuenta')}
-                        className='p-1 hover:bg-slate-200 rounded transition cursor-pointer text-slate-500 hover:text-slate-800'
-                        title='Copiar cuenta'
-                      >
-                        <Icons.copy className='h-3 w-3' />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {pm.routing_number && (
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='text-slate-500'>Doc / RIF:</span>
-                    <span className='font-mono text-slate-700'>{pm.routing_number}</span>
+                {/* Nota / Instrucciones de Pago */}
+                {pm.instructions && (
+                  <div
+                    className={`mt-3 flex items-start gap-2.5 p-3 rounded-xl border text-xs leading-relaxed ${theme.infoBox}`}
+                  >
+                    <Icons.info className={`h-4 w-4 shrink-0 mt-0.5 ${theme.infoIcon}`} />
+                    <p className='font-normal text-slate-700'>{pm.instructions}</p>
                   </div>
                 )}
               </div>
-
-              {pm.instructions && (
-                <p className='text-[11px] text-slate-500 italic leading-snug'>{pm.instructions}</p>
-              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
