@@ -31,8 +31,8 @@ interface DashboardHeaderProps {
 export function DashboardHeader({
   brandName = 'ContractCloud',
   brandLogo = 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg',
-  userEmail = 'qijoos3niievsik@gmail.com',
-  isAdmin = true
+  userEmail = '',
+  isAdmin = false
 }: DashboardHeaderProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -40,13 +40,24 @@ export function DashboardHeader({
   const [isUserAdmin, setIsUserAdmin] = useState(isAdmin);
 
   useEffect(() => {
+    setCurrentUserEmail(userEmail);
+    setIsUserAdmin(isAdmin);
+  }, [userEmail, isAdmin]);
+
+  useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user?.email) {
         setCurrentUserEmail(user.email);
-        setIsUserAdmin(user.email === 'qijoos3niievsik@gmail.com');
+        setIsUserAdmin(
+          user.email === 'qijoos3niievsik@gmail.com' ||
+            user.user_metadata?.role === 'admin' ||
+            (user.email === userEmail && isAdmin)
+        );
+      } else {
+        setIsUserAdmin(false);
       }
     });
-  }, [supabase]);
+  }, [supabase, userEmail, isAdmin]);
 
   const handleLogout = async () => {
     try {
@@ -80,17 +91,20 @@ export function DashboardHeader({
                 <div className='w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-500 font-bold'>
                   ⚡
                 </div>
-                <span className='font-bold text-lg leading-tight tracking-tight'>
-                  {brandName}
-                </span>
+                <span className='font-bold text-lg leading-tight tracking-tight'>{brandName}</span>
               </div>
             )}
           </Link>
 
           {isUserAdmin ? (
-            <Badge variant='outline' className='ml-2 bg-blue-500/10 text-blue-500 border-blue-500/30 font-semibold text-[11px] px-2 py-0.5 shadow-sm'>
-              ADMIN
-            </Badge>
+            <Link
+              href='/dashboard/admin'
+              className='ml-2 inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 font-semibold text-[11px] px-2.5 py-0.5 shadow-sm transition-colors'
+              title='Ir al Centro Super Admin (Usuarios y Testing)'
+            >
+              <Icons.shield className='h-3 w-3' />
+              <span>ADMIN</span>
+            </Link>
           ) : (
             <Badge variant='outline' className='ml-2 text-muted-foreground text-[11px] px-2 py-0.5'>
               AGENCIA
@@ -100,15 +114,22 @@ export function DashboardHeader({
 
         {/* Right actions: Theme + User menu */}
         <div className='flex items-center gap-2 sm:gap-3'>
+          {isUserAdmin && (
+            <Link
+              href='/dashboard/admin'
+              className='hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 transition-colors'
+            >
+              <Icons.shield className='h-3.5 w-3.5' />
+              <span>Admin &amp; Usuarios</span>
+            </Link>
+          )}
           <ThemeModeToggle />
           <div className='hidden md:block'>
             <ThemeSelector />
           </div>
 
           <DropdownMenu>
-            <DropdownMenuTrigger
-              className='flex items-center gap-2 pl-2 pr-3 py-1.5 h-auto rounded-full border border-border/50 hover:bg-muted/50 cursor-pointer bg-background/60 text-foreground outline-none transition-all focus-visible:ring-2 focus-visible:ring-blue-500'
-            >
+            <DropdownMenuTrigger className='flex items-center gap-2 pl-2 pr-3 py-1.5 h-auto rounded-full border border-border/50 hover:bg-muted/50 cursor-pointer bg-background/60 text-foreground outline-none transition-all focus-visible:ring-2 focus-visible:ring-blue-500'>
               <Avatar className='h-7 w-7 text-xs bg-blue-600/20 text-blue-500 font-bold border border-blue-500/30'>
                 <AvatarFallback>
                   {currentUserEmail ? currentUserEmail.substring(0, 2).toUpperCase() : 'CP'}
@@ -119,7 +140,10 @@ export function DashboardHeader({
               </span>
               <Icons.chevronDown className='h-3.5 w-3.5 text-muted-foreground' />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align='end' className='w-56 mt-1 z-50 shadow-xl border border-border/60 bg-popover/95 backdrop-blur-md'>
+            <DropdownMenuContent
+              align='end'
+              className='w-56 mt-1 z-50 shadow-xl border border-border/60 bg-popover/95 backdrop-blur-md'
+            >
               <DropdownMenuGroup>
                 <DropdownMenuLabel className='font-normal'>
                   <div className='flex flex-col space-y-1'>
@@ -148,6 +172,15 @@ export function DashboardHeader({
                   <Icons.dashboard className='mr-2 h-4 w-4' />
                   Panel de Control
                 </DropdownMenuItem>
+                {isUserAdmin && (
+                  <DropdownMenuItem
+                    className='text-xs cursor-pointer font-semibold text-blue-600 dark:text-blue-400'
+                    onClick={() => router.push('/dashboard/admin')}
+                  >
+                    <Icons.shield className='mr-2 h-4 w-4' />
+                    Centro Super Admin
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>

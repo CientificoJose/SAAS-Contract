@@ -48,6 +48,7 @@ import {
   IconHelpCircle,
   IconInfoCircle,
   IconItalic,
+  IconKey,
   IconLayoutDashboard,
   IconLayoutKanban,
   IconLayoutSidebar,
@@ -75,6 +76,7 @@ import {
   IconSend,
   IconSettings,
   IconShare,
+  IconShieldCheck,
   IconSlash,
   IconSparkles,
   IconStack2,
@@ -204,6 +206,8 @@ export const Icons = {
   sparkles: IconSparkles,
   badgeCheck: IconRosetteDiscountCheck,
   lock: IconLock,
+  key: IconKey,
+  shield: IconShieldCheck,
 
   // Data / Charts
   trendingDown: IconTrendingDown,

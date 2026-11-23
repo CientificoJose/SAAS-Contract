@@ -12,15 +12,15 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [settings, user] = await Promise.all([
-    getSettings(),
-    getCurrentUser()
-  ]);
+  const [settings, user] = await Promise.all([getSettings(), getCurrentUser()]);
 
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'qijoos3niievsik@gmail.com';
   const brandName = settings.brand_name || 'ContractCloud';
-  const brandLogo = settings.brand_logo || 'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
-  const userEmail = user?.email || 'qijoos3niievsik@gmail.com';
-  const isAdmin = user?.role === 'admin' || userEmail === 'qijoos3niievsik@gmail.com';
+  const brandLogo =
+    settings.brand_logo ||
+    'https://contract-db.press-cloud.com/storage/v1/object/public/contract-assets/branding/logo.svg';
+  const userEmail = user?.email || '';
+  const isAdmin = Boolean(user && (user.role === 'admin' || userEmail === ADMIN_EMAIL));
 
   return (
     <div className='min-h-screen bg-background flex flex-col'>
